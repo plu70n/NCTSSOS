@@ -19,7 +19,7 @@ using NCTSSOS
 using DynamicPolynomials
 @ncpolyvar x[1:3]
 obj = 1+x[1]^4+x[2]^4+x[3]^4+x[1]*x[2]*x[3]+x[2]
-opt,data = ncblockupop_first(obj,x,TS="MD",obj="eigen")
+opt,data = nctssos_first(obj,x,TS="MD",obj="eigen")
 ```
 
 Two vectors will be outputed. The first vector is the sizes of blocks and the second vector is the number of blocks with sizes corresponding to the first vector.
@@ -27,7 +27,7 @@ Two vectors will be outputed. The first vector is the sizes of blocks and the se
 To exetute higher NCTSSOS hierarchies, repeatedly run
 
 ```Julia
-opt,data = ncblockupop_higher!(data,TS="MD")
+opt,data = nctssos_higher!(data,TS="MD")
 ```
 
 Options:   
@@ -44,13 +44,13 @@ ineq=[4-x[1]^2-x[2]^2, x[1]*x[2]+x[2]*x[1]-2]
 eq=[]
 pop=[obj; ineq; eq]
 d=2 # the relaxation order
-opt,data=ncblockcpop_first(pop,x,d,TS="MD",obj="eigen")
+opt,data=nctssos_first(pop,x,d,TS="MD",obj="eigen")
 ```
 
 To exetute higher NCTSSOS hierarchies, repeatedly run
 
 ```Julia
-opt,data = ncblockcpop_higher!(data,TS="MD")
+opt,data = nctssos_higher!(data,TS="MD")
 ```
 
 Options:  
@@ -58,7 +58,7 @@ obj: "eigen" (implement the eigenvalue optimization), "trace" (implement the tra
 TS: "block" (using the NCTSSOS hierarchy), "MD" or "MF" (using the chordal-NCTSSOS hierarchy), false (without term sparsity)  
 
 ## References
-[1] [Exploiting Term Sparsity in Noncommutative Polynomial Optimization]
+[1] [Exploiting Term Sparsity in Non-commutative Polynomial Optimization]
 
 ## Contact
 [Jie Wang](https://wangjie212.github.io/jiewang/): jwang@laas.fr
