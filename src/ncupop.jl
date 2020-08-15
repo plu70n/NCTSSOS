@@ -3,134 +3,287 @@ mutable struct data_type
     basis
     coe
     obj
-    supp1
+    tsupp
     ub
     sizes
 end
 
-function ncblockupop_first(f, x; newton=true, reducebasis=true, TS="block", obj="eigen", merge=false, QUIET=false)
+function nctssos_first(f::Polynomial, x::Vector{PolyVar}; newton=true, reducebasis=true, TS="block", obj="eigen", merge=false, QUIET=false)
     n=length(x)
-    if obj=="trace"
-        f=cyclic_canon(f, x)
-    end
     mon=monomials(f)
     coe=coefficients(f)
     lm=length(mon)
     supp=[UInt16[] for i=1:lm]
     for i=1:lm
-        vars=variables(mon[i])
-        exp=exponents(mon[i])
-        ind=[exp[k]!=0 for k=1:length(exp)]
-        vars=vars[ind]
-        exp=exp[ind]
+        ind=mon[i].z .>0
+        vars=mon[i].vars[ind]
+        exp=mon[i].z[ind]
         for j=1:length(vars)
             k=ncbfind(x, n, vars[j], rev=true)
             append!(supp[i], k*ones(UInt16, exp[j]))
         end
     end
-    d=Int(maxdegree(f)/2)
-    if newton==true
-        basis=newton_ncbasis(n, d, supp)
+    if obj=="trace"
+        supp, coe=cyclic_canon(supp, coe)
     else
-        basis=get_ncbasis(n, d)
+        supp, coe=sym_canon(supp, coe)
     end
-    blocks,cl,blocksize,ub,sizes,_=get_ncblocks(supp,basis,TS=TS,QUIET=QUIET,merge=merge,obj=obj)
-    if reducebasis==true
-        tsupp=copy(supp)
-        push!(tsupp, UInt16[])
-        basis,flag=reducebasis!(tsupp,basis,blocks,cl,blocksize)
+    if newton==true
+        if obj=="trace"
+            basis=newton_cyclic(supp, n, d)
+        else
+            basis=newton_ncbasis(supp)
+        end
+    else
+        basis=get_ncbasis(n, Int(maxdegree(f)/2))
+    end
+    tsupp=copy(supp)
+    if obj=="trace"
+        append!(tsupp, [_cyclic_canon([basis[i][end:-1:1]; basis[i]]) for i=1:length(basis)])
+    else
+        append!(tsupp, [[basis[i][end:-1:1]; basis[i]] for i=1:length(basis)])
+    end
+    sort!(tsupp)
+    unique!(tsupp)
+    blocks,cl,blocksize,ub,sizes,_=get_ncblocks(tsupp,basis,TS=TS,QUIET=QUIET,merge=merge,obj=obj)
+    if reducebasis==true&&obj=="eigen"
+        psupp=copy(supp)
+        psupp=psupp[is_sym.(psupp)]
+        push!(psupp, UInt16[])
+        basis,flag=reducebasis!(psupp,basis,blocks,cl,blocksize)
         if flag==1
-            blocks,cl,blocksize,ub,sizes,_=get_ncblocks(supp,basis,TS=TS,QUIET=QUIET,merge=merge,obj=obj)
+            tsupp=copy(supp)
+            if obj=="trace"
+                append!(tsupp, [_cyclic_canon([basis[i][end:-1:1]; basis[i]]) for i=1:length(basis)])
+            else
+                append!(tsupp, [[basis[i][end:-1:1]; basis[i]] for i=1:length(basis)])
+            end
+            sort!(tsupp)
+            unique!(tsupp)
+            blocks,cl,blocksize,ub,sizes,_=get_ncblocks(tsupp,basis,TS=TS,QUIET=QUIET,merge=merge,obj=obj)
         end
     end
-    opt,supp1=ncblockupop(supp,coe,basis,blocks,cl,blocksize,QUIET=QUIET,obj=obj)
-    data=data_type(supp,basis,obj,coe,supp1,ub,sizes)
+    opt,tsupp=ncblockupop(supp,coe,basis,blocks,cl,blocksize,QUIET=QUIET,obj=obj)
+    data=data_type(supp,basis,coe,obj,tsupp,ub,sizes)
     return opt,data
 end
 
-function ncblockupop_higher!(data;TS="block",merge=false,QUIET=false)
+function nctssos_first(supp::Vector{Vector{UInt16}}, coe::Vector{Float64}, n::Int, d::Int; newton=true, reducebasis=true, TS="block", obj="eigen", merge=false, QUIET=false)
+    if obj=="trace"
+        supp, coe=cyclic_canon(supp, coe)
+    else
+        supp, coe=sym_canon(supp, coe)
+    end
+    if newton==true
+        if obj=="trace"
+            basis=newton_cyclic(supp, n, d)
+        else
+            basis=newton_ncbasis(supp)
+        end
+    else
+        basis=get_ncbasis(n, d)
+    end
+    tsupp=copy(supp)
+    if obj=="trace"
+        append!(tsupp, [_cyclic_canon([basis[i][end:-1:1]; basis[i]]) for i=1:length(basis)])
+    else
+        append!(tsupp, [[basis[i][end:-1:1]; basis[i]] for i=1:length(basis)])
+    end
+    sort!(tsupp)
+    unique!(tsupp)
+    blocks,cl,blocksize,ub,sizes,_=get_ncblocks(tsupp,basis,TS=TS,QUIET=QUIET,merge=merge,obj=obj)
+    if reducebasis==true&&obj=="eigen"
+        psupp=copy(supp)
+        psupp=psupp[is_sym.(psupp)]
+        push!(psupp, UInt16[])
+        basis,flag=reducebasis!(psupp,basis,blocks,cl,blocksize)
+        if flag==1
+            tsupp=copy(supp)
+            if obj=="trace"
+                append!(tsupp, [_cyclic_canon([basis[i][end:-1:1]; basis[i]]) for i=1:length(basis)])
+            else
+                append!(tsupp, [[basis[i][end:-1:1]; basis[i]] for i=1:length(basis)])
+            end
+            sort!(tsupp)
+            unique!(tsupp)
+            blocks,cl,blocksize,ub,sizes,_=get_ncblocks(tsupp,basis,TS=TS,QUIET=QUIET,merge=merge,obj=obj)
+        end
+    end
+    opt,tsupp=ncblockupop(supp,coe,basis,blocks,cl,blocksize,QUIET=QUIET,obj=obj)
+    data=data_type(supp,basis,coe,obj,tsupp,ub,sizes)
+    return opt,data
+end
+
+function nctssos_higher!(data::data_type; TS="block", merge=false, QUIET=false)
     supp=data.supp
     basis=data.basis
     coe=data.coe
     obj=data.obj
-    supp1=data.supp1
+    tsupp=data.tsupp
     ub=data.ub
     sizes=data.sizes
-    blocks,cl,blocksize,ub,sizes,status=get_ncblocks(supp,basis,ub=ub,sizes=sizes,TS=TS,QUIET=QUIET,merge=merge,obj=obj)
+    blocks,cl,blocksize,ub,sizes,status=get_ncblocks(tsupp,basis,ub=ub,sizes=sizes,TS=TS,QUIET=QUIET,merge=merge,obj=obj)
     opt=nothing
     if status==1
-        opt,supp1=ncblockupop(supp,coe,basis,blocks,cl,blocksize,QUIET=QUIET,obj=obj)
+        opt,tsupp=ncblockupop(supp,coe,basis,blocks,cl,blocksize,QUIET=QUIET,obj=obj)
     end
-    data.supp1=supp1
+    data.tsupp=tsupp
     data.ub=ub
     data.sizes=sizes
     return opt,data
 end
 
-function cyclic_canon(f, x)
-    mon=monomials(f)
-    coe=coefficients(f)
-    return sum([coe[i]*prod(x[_cyclic_canon(mon[i], x)]) for i=1:length(mon)])
+function cc(a::Vector{UInt16}, n::Int)
+    ua=unique(a)
+    ca=zeros(UInt8, n)
+    for i=1:length(ua)
+        ca[ua[i]]=count(x->isequal(ua[i], x), a)
+    end
+    return ca
 end
 
-function _cyclic_canon(w, x)
-    if isconstant(w)
-        return UInt16[]
+function remove(csupp, dw, n)
+    model=Model(optimizer_with_attributes(Mosek.Optimizer))
+    set_optimizer_attribute(model, MOI.Silent(), true)
+    t=@variable(model)
+    alpha=@variable(model, [1:n])
+    @constraint(model, [i=1:length(csupp)], alpha'*(csupp[i].-2*dw)<=t)
+    @objective(model, Min, t)
+    optimize!(model)
+    if objective_value(model)>=0
+        return true
+    else
+        return false
     end
-    vars=variables(w)
-    exp=exponents(w)
-    ind=[exp[i]!=0 for i=1:length(exp)]
-    vars=vars[ind]
-    exp=exp[ind]
-    a=UInt16[]
-    for j=1:length(vars)
-        k=ncbfind(x, n, vars[j], rev=true)
-        append!(a, k*ones(UInt16, exp[j]))
-    end
-    return minimum([[a[i+1:length(a)]; a[1:i]] for i=0:length(a)-1])
 end
 
-function _cyclic_canon(a)
+function permutation(a)
+    b=sparse(a)
+    ua=convert(Vector{UInt16}, b.nzind)
+    na=convert(Vector{UInt16}, b.nzval)
+    return _permutation(ua, na)
+end
+
+function _permutation(ua, na)
+    if !isempty(ua)
+        perm=Vector{UInt16}[]
+        for i=1:length(ua)
+            nua=copy(ua)
+            nna=copy(na)
+            if na[i]==1
+                deleteat!(nua, i)
+                deleteat!(nna, i)
+            else
+                nna[i]-=1
+            end
+            temp=_permutation(nua, nna)
+            push!.(temp, ua[i])
+            append!(perm, temp)
+        end
+        return perm
+    else
+        return [UInt16[]]
+    end
+end
+
+function newton_cyclic(supp, n, d)
+    pbasis=get_basis(n,d)
+    basis=[UInt16[]]
+    csupp=cc.(supp, n)
+    pushfirst!(csupp, zeros(UInt8, n))
+    sort!(csupp)
+    unique!(csupp)
+    for i=2:size(pbasis,2)
+        if remove(csupp, pbasis[:,i], n)
+            append!(basis, permutation(pbasis[:,i]))
+        end
+    end
+    sort!(basis)
+    return basis
+end
+
+function get_basis(n,d)
+    lb=binomial(n+d,d)
+    basis=zeros(UInt8,n,lb)
+    i=0
+    t=1
+    while i<d+1
+        t+=1
+        if basis[n,t-1]==i
+           if i<d
+              basis[1,t]=i+1
+           end
+           i+=1
+        else
+            j=findfirst(x->basis[x,t-1]!=0,1:n)
+            basis[:,t]=basis[:,t-1]
+            if j==1
+               basis[1,t]-=1
+               basis[2,t]+=1
+            else
+               basis[1,t]=basis[j,t]-1
+               basis[j,t]=0
+               basis[j+1,t]+=1
+            end
+        end
+    end
+    return basis
+end
+
+function _cyclic_canon(a::Vector{UInt16})
     if isempty(a)
-        return UInt16[]
+        return a
     else
         return minimum([[a[i+1:length(a)]; a[1:i]] for i=0:length(a)-1])
     end
 end
 
-function symmetrize(f)
-    mon=monomials(f)
-    coe=coefficients(f)
-    g=sum([coe[i]*prod(variables(mon[i])[end:-1:1].^exponents(mon[i])[end:-1:1]) for i=1:length(mon)])
-    return (f+g)/2
+function cyclic_canon(supp, coe)
+    nsupp=copy(supp)
+    nsupp=_sym_canon.(nsupp)
+    nsupp=_cyclic_canon.(nsupp)
+    sort!(nsupp)
+    unique!(nsupp)
+    l=length(nsupp)
+    ncoe=zeros(l)
+    for i=1:length(supp)
+        Locb=ncbfind(nsupp,l,_cyclic_canon(_sym_canon(supp[i])))
+        ncoe[Locb]+=coe[i]
+    end
+    return nsupp, ncoe
 end
 
-function iscyclic(a, b)
-    n=length(a)
-    if n!=length(b)
-        return false
-    else
-        for i=0:n-1
-            if isequal([a[i+1:n]; a[1:i]], b)
-                return true
-            end
+function _sym_canon(a::Vector{UInt16})
+    i=1
+    while i<=Int(ceil((length(a)-1)/2))
+        if a[i]<a[end+1-i]
+            return a
+        elseif a[i]>a[end+1-i]
+            return reverse(a)
+        else
+            i+=1
         end
-        return false
     end
+    return a
 end
 
-function cyclic_class(A)
-    n=length(A)
-    G=SimpleGraph(n)
-    for i = 1:lb, j = i+1:lb
-        if iscyclic(A[i], A[j])
-           add_edge!(G, i, j)
-        end
+function is_sym(a::Vector{UInt16})
+    l=Int(ceil((length(a)-1)/2))
+    return isequal(a[1:l], a[end:-1:end-l+1])
+end
+
+function sym_canon(supp, coe)
+    nsupp=copy(supp)
+    nsupp=_sym_canon.(nsupp)
+    sort!(nsupp)
+    unique!(nsupp)
+    l=length(nsupp)
+    ncoe=zeros(l)
+    for i=1:length(supp)
+        Locb=ncbfind(nsupp,l,_sym_canon(supp[i]))
+        ncoe[Locb]+=coe[i]
     end
-    blocks=connected_components(G)
-    blocksize=length.(blocks)
-    cl=length(blocksize)
-    return blocks,cl,blocksize
+    return nsupp, ncoe
 end
 
 function get_ncbasis(n,d)
@@ -155,23 +308,21 @@ function _get_ncbasis_deg(n,d)
     end
 end
 
-function newton_ncbasis(n, d, supp)
-    tsupp=copy(supp)
-    sort!(tsupp)
-    ltsupp=length(tsupp)
-    basis=get_ncbasis(n, d)
-    lb=length(basis)
+function newton_ncbasis(supp)
     nbasis=[UInt16[]]
-    for i=2:lb
-        bi=[basis[i][end:-1:1]; basis[i]]
-        if ncbfind(tsupp, ltsupp, bi)!=0
-            for j=1:length(basis[i])
-                temp=basis[i][end-j+1:end]
-                push!(nbasis, temp)
+    for bi in supp
+        if iseven(length(bi))
+            k=Int(length(bi)/2)
+            w=bi[end-k+1:end]
+            if isequal(w, bi[k:-1:1])
+                for j=1:k
+                    push!(nbasis, w[end-j+1:end])
+                end
             end
         end
     end
     sort!(nbasis)
+    unique!(nbasis)
     return nbasis
 end
 
@@ -202,20 +353,13 @@ function ncbfind(A, l, a; rev=false)
     return 0
 end
 
-function get_ncgraph(supp,basis;obj="eigen")
+function get_ncgraph(tsupp,basis;obj="eigen")
     lb=length(basis)
     G=SimpleGraph(lb)
-    tsupp=copy(supp)
-    if obj=="trace"
-        append!(tsupp, [_cyclic_canon([basis[i][end:-1:1]; basis[i]]) for i=1:lb])
-    else
-        append!(tsupp, [[basis[i][end:-1:1]; basis[i]] for i=1:lb])
-    end
-    sort!(tsupp)
-    unique!(tsupp)
     ltsupp=length(tsupp)
     for i = 1:lb, j = i+1:lb
         bi = [basis[i][end:-1:1]; basis[j]]
+        bi=_sym_canon(bi)
         if obj=="trace"
             bi=_cyclic_canon(bi)
         end
@@ -223,16 +367,16 @@ function get_ncgraph(supp,basis;obj="eigen")
            add_edge!(G, i, j)
         end
     end
-    return G, tsupp
+    return G
 end
 
-function get_ncblocks(supp,basis;ub=[],sizes=[],TS="block",obj="eigen",minimize=false,QUIET=true,merge=false)
+function get_ncblocks(tsupp,basis;ub=[],sizes=[],TS="block",obj="eigen",minimize=false,QUIET=true,merge=false)
     if TS==false
         blocksize=[length(basis)]
         blocks=[[i for i=1:length(basis)]]
         cl=1
     else
-        G,_=get_ncgraph(supp,basis,obj=obj)
+        G=get_ncgraph(tsupp,basis,obj=obj)
         if TS=="block"
             blocks=connected_components(G)
             blocksize=length.(blocks)
@@ -263,22 +407,22 @@ function get_ncblocks(supp,basis;ub=[],sizes=[],TS="block",obj="eigen",minimize=
 end
 
 function ncblockupop(supp,coe,basis,blocks,cl,blocksize;QUIET=true,obj="eigen")
-    supp1=Vector{Vector{UInt16}}(undef, sum(blocksize.^2))
+    tsupp=Vector{Vector{UInt16}}(undef, Int(sum(blocksize.^2+blocksize)/2))
     k=1
-    for i=1:cl, j=1:blocksize[i], r=1:blocksize[i]
+    for i=1:cl, j=1:blocksize[i], r=j:blocksize[i]
         @inbounds bi=[basis[blocks[i][j]][end:-1:1]; basis[blocks[i][r]]]
-        @inbounds supp1[k]=bi
+        @inbounds tsupp[k]=_sym_canon(bi)
         k+=1
     end
     if obj=="trace"
-        supp1=_cyclic_canon.(supp1)
+        tsupp=_cyclic_canon.(tsupp)
     end
-    sort!(supp1)
-    unique!(supp1)
-    lsupp1=length(supp1)
+    sort!(tsupp)
+    unique!(tsupp)
+    ltsupp=length(tsupp)
     model=Model(optimizer_with_attributes(Mosek.Optimizer))
     set_optimizer_attribute(model, MOI.Silent(), QUIET)
-    cons=[AffExpr(0) for i=1:lsupp1]
+    cons=[AffExpr(0) for i=1:ltsupp]
     for i=1:cl
         bs=blocksize[i]
         if bs==1
@@ -287,24 +431,28 @@ function ncblockupop(supp,coe,basis,blocks,cl,blocksize;QUIET=true,obj="eigen")
            if obj=="trace"
                bi=_cyclic_canon(bi)
            end
-           Locb=ncbfind(supp1,lsupp1,bi)
+           Locb=ncbfind(tsupp,ltsupp,bi)
            @inbounds cons[Locb]+=pos
         else
            @inbounds pos=@variable(model, [1:bs, 1:bs], PSD)
-           for j=1:blocksize[i], r=1:blocksize[i]
+           for j=1:blocksize[i], r=j:blocksize[i]
                @inbounds bi = [basis[blocks[i][j]][end:-1:1]; basis[blocks[i][r]]]
+               bi=_sym_canon(bi)
                if obj=="trace"
                    bi=_cyclic_canon(bi)
                end
-               Locb=ncbfind(supp1,lsupp1,bi)
-               @inbounds cons[Locb]+=pos[j,r]
+               Locb=ncbfind(tsupp,ltsupp,bi)
+               if j==r
+                   @inbounds cons[Locb]+=pos[j,r]
+               else
+                   @inbounds cons[Locb]+=2*pos[j,r]
+               end
            end
         end
     end
-    bc=zeros(lsupp1)
-    lsupp=length(supp)
-    for i=1:lsupp
-        Locb=ncbfind(supp1,lsupp1,supp[i])
+    bc=zeros(ltsupp)
+    for i=1:length(supp)
+        Locb=ncbfind(tsupp,ltsupp,supp[i])
         if Locb==0
            @error "The monomial basis is not enough!"
            return nothing,nothing
@@ -314,7 +462,7 @@ function ncblockupop(supp,coe,basis,blocks,cl,blocksize;QUIET=true,obj="eigen")
     end
     @variable(model, lower)
     cons[1]+=lower
-    @constraint(model, con[i=1:lsupp1], cons[i]==bc[i])
+    @constraint(model, con[i=1:ltsupp], cons[i]==bc[i])
     @objective(model, Max, lower)
     optimize!(model)
     status=termination_status(model)
@@ -328,5 +476,5 @@ function ncblockupop(supp,coe,basis,blocks,cl,blocksize;QUIET=true,obj="eigen")
        println("solution status: $sstatus")
        println("optimum = $objv")
     end
-    return objv,supp1
+    return objv,tsupp
 end
