@@ -15,7 +15,7 @@ mutable struct cdata_type
     gblocksize
 end
 
-function nctssos_first(pop::Vector{Polynomial},x::Vector{PolyVar},d::Int64;numeq=0,reducebasis=false,TS="block",obj="eigen",merge=false,QUIET=false)
+function nctssos_first(pop::Vector{Polynomial{false, T}} where T<:Number,x::Vector{PolyVar{false}},d::Int;numeq=0,reducebasis=false,TS="block",obj="eigen",merge=false,QUIET=false)
     n=length(x)
     m=length(pop)-1
     coe=Vector{Vector{Float64}}(undef, m+1)

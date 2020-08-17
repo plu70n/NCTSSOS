@@ -8,7 +8,7 @@ mutable struct data_type
     sizes
 end
 
-function nctssos_first(f::Polynomial, x::Vector{PolyVar}; newton=true, reducebasis=true, TS="block", obj="eigen", merge=false, QUIET=false)
+function nctssos_first(f::Polynomial{false, T} where T<:Number, x::Vector{PolyVar{false}}; newton=true, reducebasis=true, TS="block", obj="eigen", merge=false, QUIET=false)
     n=length(x)
     mon=monomials(f)
     coe=coefficients(f)
