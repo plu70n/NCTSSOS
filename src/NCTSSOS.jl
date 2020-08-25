@@ -10,7 +10,7 @@ using MetaGraphs
 using LinearAlgebra
 using SparseArrays
 
-export newton_ncbasis, get_ncbasis, reducebasis!, ncbfind, get_ncblocks, ncblockupop, ncblockupop_first, ncblockupop_higher!, get_nccblocks!, ncblockcpop, ncblockcpop_first, ncblockcpop_higher!
+export newton_ncbasis, newton_cyclic, get_ncbasis, reducebasis!, ncbfind, get_ncblocks, ncblockupop, nctssos_first, nctssos_higher!, get_nccblocks!, ncblockcpop
 
 include("chordal_extension.jl")
 include("clique_merge.jl")

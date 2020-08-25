@@ -60,7 +60,7 @@ function nctssos_first(pop::Vector{Polynomial{false, T}} where T<:Number,x::Vect
     end
     sort!(tsupp)
     unique!(tsupp)
-    fblocks,fcl,fblocksize,gblocks,gcl,gblocksize,ub,sizes,_=get_nccblocks!(m,tsupp,supp,lt,fbasis,gbasis,TS=TS,obj=obj,QUIET=QUIET,merge=merge)
+    fblocks,fcl,fblocksize,gblocks,gcl,gblocksize,ub,sizes,_=get_nccblocks!(m,tsupp,supp[2:end],lt[2:end],fbasis,gbasis,TS=TS,obj=obj,QUIET=QUIET,merge=merge)
     if reducebasis==true&&obj=="eigen"
         gsupp=get_ncgsupp(m,lt,supp,gbasis,gblocks,gcl,gblocksize)
         psupp=copy(supp[1])
@@ -76,7 +76,7 @@ function nctssos_first(pop::Vector{Polynomial{false, T}} where T<:Number,x::Vect
             append!(tsupp, [[fbasis[i][end:-1:1]; fbasis[i]] for i=1:length(fbasis)])
             sort!(tsupp)
             unique!(tsupp)
-            fblocks,fcl,fblocksize,gblocks,gcl,gblocksize,ub,sizes,_=get_nccblocks!(m,tsupp,supp,lt,fbasis,gbasis,TS=TS,obj=obj,QUIET=QUIET,merge=merge)
+            fblocks,fcl,fblocksize,gblocks,gcl,gblocksize,ub,sizes,_=get_nccblocks!(m,tsupp,supp[2:end],lt[2:end],fbasis,gbasis,TS=TS,obj=obj,QUIET=QUIET,merge=merge)
         end
     end
     opt,tsupp=ncblockcpop(m,supp,coe,lt,fbasis,gbasis,fblocks,fcl,fblocksize,gblocks,gcl,gblocksize,numeq=numeq,QUIET=QUIET,obj=obj)
@@ -110,7 +110,7 @@ function nctssos_first(supp::Vector{Vector{Vector{UInt16}}},coe::Vector{Vector{F
     end
     sort!(tsupp)
     unique!(tsupp)
-    fblocks,fcl,fblocksize,gblocks,gcl,gblocksize,ub,sizes,_=get_nccblocks!(m,tsupp,supp,lt,fbasis,gbasis,TS=TS,obj=obj,QUIET=QUIET,merge=merge)
+    fblocks,fcl,fblocksize,gblocks,gcl,gblocksize,ub,sizes,_=get_nccblocks!(m,tsupp,supp[2:end],lt[2:end],fbasis,gbasis,TS=TS,obj=obj,QUIET=QUIET,merge=merge)
     if reducebasis==true&&obj=="eigen"
         gsupp=get_ncgsupp(m,lt,supp,gbasis,gblocks,gcl,gblocksize)
         psupp=copy(supp[1])
@@ -126,7 +126,7 @@ function nctssos_first(supp::Vector{Vector{Vector{UInt16}}},coe::Vector{Vector{F
             append!(tsupp, [[fbasis[i][end:-1:1]; fbasis[i]] for i=1:length(fbasis)])
             sort!(tsupp)
             unique!(tsupp)
-            fblocks,fcl,fblocksize,gblocks,gcl,gblocksize,ub,sizes,_=get_nccblocks!(m,tsupp,supp,lt,fbasis,gbasis,TS=TS,obj=obj,QUIET=QUIET,merge=merge)
+            fblocks,fcl,fblocksize,gblocks,gcl,gblocksize,ub,sizes,_=get_nccblocks!(m,tsupp,supp[2:end],lt[2:end],fbasis,gbasis,TS=TS,obj=obj,QUIET=QUIET,merge=merge)
         end
     end
     opt,tsupp=ncblockcpop(m,supp,coe,lt,fbasis,gbasis,fblocks,fcl,fblocksize,gblocks,gcl,gblocksize,numeq=numeq,QUIET=QUIET,obj=obj)
@@ -149,7 +149,7 @@ function nctssos_higher!(data::cdata_type;TS="block",minimize=false,merge=false,
     gblocks=data.gblocks
     gcl=data.gcl
     gblocksize=data.gblocksize
-    fblocks,fcl,fblocksize,gblocks,gcl,gblocksize,ub,sizes,status=get_nccblocks!(m,tsupp,supp,lt,fbasis,gbasis,gblocks=gblocks,gcl=gcl,gblocksize=gblocksize,ub=ub,sizes=sizes,TS=TS,obj=obj,QUIET=QUIET,merge=merge)
+    fblocks,fcl,fblocksize,gblocks,gcl,gblocksize,ub,sizes,status=get_nccblocks!(m,tsupp,supp[2:end],lt[2:end],fbasis,gbasis,gblocks=gblocks,gcl=gcl,gblocksize=gblocksize,ub=ub,sizes=sizes,TS=TS,obj=obj,QUIET=QUIET,merge=merge)
     opt=nothing
     if status==1
         opt,tsupp=ncblockcpop(m,supp,coe,lt,fbasis,gbasis,fblocks,fcl,fblocksize,gblocks,gcl,gblocksize,numeq=numeq,QUIET=QUIET,obj=obj)
@@ -253,7 +253,7 @@ function get_nccgraph(tsupp,supp,lt,basis;obj="eigen")
     return G
 end
 
-function get_nccblocks!(m,tsupp,supp,lt,fbasis,gbasis;gblocks=[],gcl=[],gblocksize=[],ub=[],sizes=[],TS="block",obj="eigen",minimize=false,QUIET=true,merge=false)
+function get_nccblocks!(m,tsupp,gsupp,lt,fbasis,gbasis;gblocks=[],gcl=[],gblocksize=[],ub=[],sizes=[],TS="block",obj="eigen",minimize=false,QUIET=true,merge=false)
     if isempty(gblocks)
         gblocks=Vector{Vector{Vector{UInt16}}}(undef,m)
         gblocksize=Vector{Vector{UInt16}}(undef, m)
@@ -291,7 +291,7 @@ function get_nccblocks!(m,tsupp,supp,lt,fbasis,gbasis;gblocks=[],gcl=[],gblocksi
                 println("------------------------------------------------------")
             end
             for k=1:m
-                G=get_nccgraph(tsupp,supp[k+1],lt[k+1],gbasis[k],obj=obj)
+                G=get_nccgraph(tsupp,gsupp[k],lt[k],gbasis[k],obj=obj)
                 gblocks[k]=connected_components(G)
                 gblocksize[k]=length.(gblocks[k])
                 gcl[k]=length(gblocksize[k])
@@ -320,7 +320,7 @@ function get_nccblocks!(m,tsupp,supp,lt,fbasis,gbasis;gblocks=[],gcl=[],gblocksi
                 println("------------------------------------------------------")
             end
             for k=1:m
-                G=get_nccgraph(tsupp,supp[k+1],lt[k+1],gbasis[k],obj=obj)
+                G=get_nccgraph(tsupp,gsupp[k],lt[k],gbasis[k],obj=obj)
                 gblocks[k],gcl[k],gblocksize[k]=chordal_cliques!(G, method=TS, minimize=minimize)
                 if merge==true
                     gblocks[k],gcl[k],gblocksize[k]=clique_merge!(gblocks[k],gcl[k],QUIET=true)

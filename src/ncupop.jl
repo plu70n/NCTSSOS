@@ -286,20 +286,20 @@ function sym_canon(supp, coe)
     return nsupp, ncoe
 end
 
-function get_ncbasis(n,d)
+function get_ncbasis(n, d; ind=UInt16[i for i=1:n])
     basis=[UInt16[]]
     for i=1:d
-        append!(basis, _get_ncbasis_deg(n,i))
+        append!(basis, _get_ncbasis_deg(n, i, ind=ind))
     end
     return basis
 end
 
-function _get_ncbasis_deg(n,d)
+function _get_ncbasis_deg(n, d; ind=UInt16[i for i=1:n])
     if d>0
         basis=Vector{UInt16}[]
         for i=1:n
-            temp=_get_ncbasis_deg(n,d-1)
-            push!.(temp, i)
+            temp=_get_ncbasis_deg(n, d-1, ind=ind)
+            push!.(temp, ind[i])
             append!(basis, temp)
         end
         return basis
@@ -363,6 +363,10 @@ function get_ncgraph(tsupp,basis;obj="eigen")
         if obj=="trace"
             bi=_cyclic_canon(bi)
         end
+        # if nx>0
+        #     bi=comm(bi, nx)
+        #     proj!(bi)
+        # end
         if ncbfind(tsupp, ltsupp, bi)!=0
            add_edge!(G, i, j)
         end
@@ -478,3 +482,30 @@ function ncblockupop(supp,coe,basis,blocks,cl,blocksize;QUIET=true,obj="eigen")
     end
     return objv,tsupp
 end
+
+# function proj!(a::Vector{UInt16})
+#     i=1
+#     while i<=length(a)-1
+#         if a[i]==a[i+1]
+#             deleteat!(a, i)
+#         else
+#             i+=1
+#         end
+#     end
+#     return a
+# end
+#
+# function comm(a::Vector{UInt16}, nx)
+#     ind1=a.<=nx
+#     ind2=a.>nx
+#     return [a[ind1]; a[ind2]]
+# end
+#
+# function is_basis(a::Vector{UInt16}, nx)
+#     for i=1:length(a)-1
+#         if a[i]==a[i+1]
+#             return false
+#         end
+#     end
+#     return comm(a, nx)==a
+# end
