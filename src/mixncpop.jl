@@ -23,7 +23,100 @@ mutable struct mdata_type
     sizes::Vector{Vector{UInt16}}
 end
 
-function cs_nctssos_first(pop,x,d;numeq=0,CS="MD",minimize=false,assign="min",TS="block",QUIET=false,obj="eigen")
+mutable struct mudata_type
+    n::Int
+    d::Int
+    supp::Vector{Vector{UInt16}}
+    coe::Vector{Float64}
+    obj
+    tsupp::Vector{Vector{UInt16}}
+    basis::Vector{Vector{Vector{UInt16}}}
+    cql::Int
+    cliques::Vector{Vector{UInt16}}
+    cliquesize::Vector{Int}
+    blocks::Vector{Vector{Vector{UInt16}}}
+    cl::Vector{UInt16}
+    blocksize::Vector{Vector{Int}}
+    ub::Vector{Vector{UInt16}}
+    sizes::Vector{Vector{UInt16}}
+end
+
+function cs_nctssos_first(f,x;d=0,CS="MD",minimize=false,TS="block",QUIET=false,obj="eigen",solve=true)
+    n=length(x)
+    mon=monomials(f)
+    coe=coefficients(f)
+    supp=[UInt16[] for i=1:length(mon)]
+    for i=1:length(mon)
+        ind=mon[i].z .>0
+        vars=mon[i].vars[ind]
+        exp=mon[i].z[ind]
+        for j=1:length(vars)
+            l=ncbfind(x, n, vars[j], rev=true)
+            append!(supp[i], l*ones(UInt16, exp[j]))
+        end
+    end
+    if obj=="trace"
+        supp, coe=cyclic_canon(supp, coe)
+    else
+        supp, coe=sym_canon(supp, coe)
+    end
+    if d==0
+        d=ceil(Int, maxdegree(f)/2)
+    end
+    cliques,cql,cliquesize=clique_decomp(n,supp)
+    blocks,cl,blocksize,ub,sizes,basis,_=get_blocks_mix(d,supp,cliques,cql,cliquesize,TS=TS,obj=obj)
+    opt,tsupp=blockupop_mix(n,d,supp,coe,basis,cliques,cql,cliquesize,blocks,cl,blocksize,obj=obj,solve=solve)
+    data=mudata_type(n,d,supp,coe,obj,tsupp,basis,cql,cliques,cliquesize,blocks,cl,blocksize,ub,sizes)
+    return opt,data
+end
+
+function cs_nctssos_first(supp::Vector{Vector{UInt16}},coe::Vector{Float64},n::Int;d=0,CS="MD",minimize=false,TS="block",QUIET=false,obj="eigen",solve=true)
+    if obj=="trace"
+        supp, coe=cyclic_canon(supp, coe)
+    else
+        supp, coe=sym_canon(supp, coe)
+    end
+    cliques,cql,cliquesize=clique_decomp(n,supp)
+    blocks,cl,blocksize,ub,sizes,basis,_=get_blocks_mix(d,supp,cliques,cql,cliquesize,TS=TS,obj=obj)
+    opt,tsupp=blockupop_mix(n,d,supp,coe,basis,cliques,cql,cliquesize,blocks,cl,blocksize,obj=obj,solve=solve)
+    data=mudata_type(n,d,supp,coe,obj,tsupp,basis,cql,cliques,cliquesize,blocks,cl,blocksize,ub,sizes)
+    return opt,data
+end
+
+function cs_nctssos_higher!(data::mudata_type;TS="block",QUIET=false,solve=true)
+    n=data.n
+    d=data.d
+    supp=data.supp
+    coe=data.coe
+    obj=data.obj
+    tsupp=data.tsupp
+    basis=data.basis
+    cql=data.cql
+    cliques=data.cliques
+    cliquesize=data.cliquesize
+    blocks=data.blocks
+    cl=data.cl
+    blocksize=data.blocksize
+    ub=data.ub
+    sizes=data.sizes
+    blocks,cl,blocksize,ub,sizes,basis,status=get_blocks_mix(d,supp,cliques,cql,cliquesize,tsupp=tsupp,basis=basis,blocks=blocks,cl=cl,blocksize=blocksize,ub=ub,sizes=sizes,TS=TS,obj=obj)
+    blocks,cl,blocksize,ub,sizes,lt,fbasis,gbasis,status=get_cblocks_mix!(d,dg,J,m,supp,cliques,cql,cliquesize,tsupp=tsupp,lt=lt,fbasis=fbasis,gbasis=gbasis,blocks=blocks,cl=cl,blocksize=blocksize,ub=ub,sizes=sizes,TS=TS,obj=obj)
+    if status==1
+        opt,tsupp=blockupop_mix(n,d,supp,coe,basis,cliques,cql,cliquesize,blocks,cl,blocksize,obj=obj,solve=solve)
+    else
+        opt=nothing
+        println("No higher CS-NCTSSOS hierarchy!")
+    end
+    data.tsupp=tsupp
+    data.blocks=blocks
+    data.cl=cl
+    data.blocksize=blocksize
+    data.ub=ub
+    data.sizes=sizes
+    return opt,data
+end
+
+function cs_nctssos_first(pop,x,d;numeq=0,CS="MD",minimize=false,assign="min",TS="block",QUIET=false,obj="eigen",solve=true)
     n=length(x)
     m=length(pop)-1
     coe=Vector{Vector{Float64}}(undef, m+1)
@@ -54,12 +147,12 @@ function cs_nctssos_first(pop,x,d;numeq=0,CS="MD",minimize=false,assign="min",TS
     cliques,cql,cliquesize=clique_decomp(n,m,d,dg,supp,alg=CS,minimize=minimize)
     J,ncc=assign_constraint(m,supp,cliques,cql,cliquesize,assign=assign)
     blocks,cl,blocksize,ub,sizes,lt,fbasis,gbasis,status=get_cblocks_mix!(d,dg,J,m,supp,cliques,cql,cliquesize,TS=TS,obj=obj)
-    opt,tsupp=blockcpop_mix(n,m,d,dg,supp,coe,fbasis,gbasis,cliques,cql,cliquesize,J,ncc,blocks,cl,blocksize,numeq=numeq,QUIET=QUIET,obj=obj)
+    opt,tsupp=blockcpop_mix(n,m,d,dg,supp,coe,fbasis,gbasis,cliques,cql,cliquesize,J,ncc,blocks,cl,blocksize,numeq=numeq,QUIET=QUIET,obj=obj,solve=solve)
     data=mdata_type(n,m,d,dg,supp,coe,obj,numeq,tsupp,lt,fbasis,gbasis,cql,cliques,cliquesize,J,ncc,blocks,cl,blocksize,ub,sizes)
     return opt,data
 end
 
-function cs_nctssos_first(supp::Vector{Vector{Vector{UInt16}}},coe::Vector{Vector{Float64}},n::Int,d,dg::Vector{Int};numeq=0,CS="MD",minimize=false,assign="min",TS="block",QUIET=false,obj="eigen")
+function cs_nctssos_first(supp::Vector{Vector{Vector{UInt16}}},coe::Vector{Vector{Float64}},n::Int,d::Int,dg::Vector{Int};numeq=0,CS="MD",minimize=false,assign="min",TS="block",QUIET=false,obj="eigen",solve=true)
     m=length(supp)-1
     if obj=="trace"
         supp[1], coe[1]=cyclic_canon(supp[1], coe[1])
@@ -69,12 +162,12 @@ function cs_nctssos_first(supp::Vector{Vector{Vector{UInt16}}},coe::Vector{Vecto
     cliques,cql,cliquesize=clique_decomp(n,m,d,dg,supp,alg=CS,minimize=minimize)
     J,ncc=assign_constraint(m,supp,cliques,cql,cliquesize,assign=assign)
     blocks,cl,blocksize,ub,sizes,lt,fbasis,gbasis,status=get_cblocks_mix!(d,dg,J,m,supp,cliques,cql,cliquesize,TS=TS,obj=obj)
-    opt,tsupp=blockcpop_mix(n,m,d,dg,supp,coe,fbasis,gbasis,cliques,cql,cliquesize,J,ncc,blocks,cl,blocksize,numeq=numeq,QUIET=QUIET,obj=obj)
+    opt,tsupp=blockcpop_mix(n,m,d,dg,supp,coe,fbasis,gbasis,cliques,cql,cliquesize,J,ncc,blocks,cl,blocksize,numeq=numeq,QUIET=QUIET,obj=obj,solve=solve)
     data=mdata_type(n,m,d,dg,supp,coe,obj,numeq,tsupp,lt,fbasis,gbasis,cql,cliques,cliquesize,J,ncc,blocks,cl,blocksize,ub,sizes)
     return opt,data
 end
 
-function cs_nctssos_higher!(data;TS="block",QUIET=false)
+function cs_nctssos_higher!(data::mdata_type;TS="block",QUIET=false,solve=true)
     n=data.n
     m=data.m
     d=data.d
@@ -99,8 +192,9 @@ function cs_nctssos_higher!(data;TS="block",QUIET=false)
     sizes=data.sizes
     blocks,cl,blocksize,ub,sizes,lt,fbasis,gbasis,status=get_cblocks_mix!(d,dg,J,m,supp,cliques,cql,cliquesize,tsupp=tsupp,lt=lt,fbasis=fbasis,gbasis=gbasis,blocks=blocks,cl=cl,blocksize=blocksize,ub=ub,sizes=sizes,TS=TS,obj=obj)
     if status==1
-        opt,tsupp=blockcpop_mix(n,m,d,dg,supp,coe,fbasis,gbasis,cliques,cql,cliquesize,J,ncc,blocks,cl,blocksize,numeq=numeq,QUIET=QUIET,obj=obj)
+        opt,tsupp=blockcpop_mix(n,m,d,dg,supp,coe,fbasis,gbasis,cliques,cql,cliquesize,J,ncc,blocks,cl,blocksize,numeq=numeq,QUIET=QUIET,obj=obj,solve=solve)
     else
+        opt=nothing
         println("No higher CS-NCTSSOS hierarchy!")
     end
     data.tsupp=tsupp
@@ -112,7 +206,7 @@ function cs_nctssos_higher!(data;TS="block",QUIET=false)
     return opt,data
 end
 
-function blockupop_mix(n,d,supp,coe,basis,cliques,cql,cliquesize,blocks,cl,blocksize;QUIET=false,obj="eigen")
+function blockupop_mix(n,d,supp,coe,basis,cliques,cql,cliquesize,blocks,cl,blocksize;QUIET=false,obj="eigen",solve=true)
     tsupp=Vector{UInt16}[]
     for i=1:cql, j=1:cl[i], k=1:blocksize[i][j], r=k:blocksize[i][j]
         @inbounds bi=[basis[i][blocks[i][j][k]][end:-1:1]; basis[i][blocks[i][j][r]]]
@@ -128,33 +222,19 @@ function blockupop_mix(n,d,supp,coe,basis,cliques,cql,cliquesize,blocks,cl,block
     # end
     sort!(tsupp)
     unique!(tsupp)
-    ltsupp=length(tsupp)
-    model=Model(optimizer_with_attributes(Mosek.Optimizer))
-    set_optimizer_attribute(model, MOI.Silent(), QUIET)
-    cons=[AffExpr(0) for i=1:ltsupp]
-    pos1=Vector{Vector{Union{VariableRef,Symmetric{VariableRef}}}}(undef, cql)
-    for i=1:cql
-        pos1[i]=Vector{Union{VariableRef,Symmetric{VariableRef}}}(undef, cl[i])
-        for k=1:cl[i]
-            if blocksize[i][k]==1
-               pos1[i][k]=@variable(model, lower_bound=0)
-               @inbounds bi=[basis[i][blocks[i][k][1]][end:-1:1]; basis[i][blocks[i][k][1]]]
-               if obj=="trace"
-                   bi=_cyclic_canon(bi)
-               end
-               # if nx>0
-               #     bi=comm(bi, nx)
-               #     proj!(bi)
-               # end
-               Locb=ncbfind(tsupp,ltsupp,bi)
-               @inbounds cons[Locb]+=pos1[i][k]
-            else
-               pos1[i][k]=@variable(model, [1:blocksize[i][k], 1:blocksize[i][k]], PSD)
-               for j=1:blocksize[i][k], r=j:blocksize[i][k]
-                   @inbounds ind1=blocks[i][k][j]
-                   @inbounds ind2=blocks[i][k][r]
-                   @inbounds bi=[basis[i][ind1][end:-1:1]; basis[i][ind2]]
-                   bi=_sym_canon(bi)
+    objv=nothing
+    if solve==true
+        ltsupp=length(tsupp)
+        model=Model(optimizer_with_attributes(Mosek.Optimizer))
+        set_optimizer_attribute(model, MOI.Silent(), QUIET)
+        cons=[AffExpr(0) for i=1:ltsupp]
+        pos1=Vector{Vector{Union{VariableRef,Symmetric{VariableRef}}}}(undef, cql)
+        for i=1:cql
+            pos1[i]=Vector{Union{VariableRef,Symmetric{VariableRef}}}(undef, cl[i])
+            for k=1:cl[i]
+                if blocksize[i][k]==1
+                   pos1[i][k]=@variable(model, lower_bound=0)
+                   @inbounds bi=[basis[i][blocks[i][k][1]][end:-1:1]; basis[i][blocks[i][k][1]]]
                    if obj=="trace"
                        bi=_cyclic_canon(bi)
                    end
@@ -163,45 +243,62 @@ function blockupop_mix(n,d,supp,coe,basis,cliques,cql,cliquesize,blocks,cl,block
                    #     proj!(bi)
                    # end
                    Locb=ncbfind(tsupp,ltsupp,bi)
-                   if j==r
-                       @inbounds cons[Locb]+=pos1[i][k][j,r]
-                   else
-                       @inbounds cons[Locb]+=2*pos1[i][k][j,r]
+                   @inbounds cons[Locb]+=pos1[i][k]
+                else
+                   pos1[i][k]=@variable(model, [1:blocksize[i][k], 1:blocksize[i][k]], PSD)
+                   for j=1:blocksize[i][k], r=j:blocksize[i][k]
+                       @inbounds ind1=blocks[i][k][j]
+                       @inbounds ind2=blocks[i][k][r]
+                       @inbounds bi=[basis[i][ind1][end:-1:1]; basis[i][ind2]]
+                       bi=_sym_canon(bi)
+                       if obj=="trace"
+                           bi=_cyclic_canon(bi)
+                       end
+                       # if nx>0
+                       #     bi=comm(bi, nx)
+                       #     proj!(bi)
+                       # end
+                       Locb=ncbfind(tsupp,ltsupp,bi)
+                       if j==r
+                           @inbounds cons[Locb]+=pos1[i][k][j,r]
+                       else
+                           @inbounds cons[Locb]+=2*pos1[i][k][j,r]
+                       end
                    end
-               end
+                end
             end
         end
-    end
-    bc=zeros(ltsupp)
-    for i=1:length(supp)
-        Locb=ncbfind(tsupp,ltsupp,supp[i])
-        if Locb==0
-           @error "The monomial basis is not enough!"
-           return nothing,nothing
-        else
-           bc[Locb]=coe[i]
+        bc=zeros(ltsupp)
+        for i=1:length(supp)
+            Locb=ncbfind(tsupp,ltsupp,supp[i])
+            if Locb==0
+               @error "The monomial basis is not enough!"
+               return nothing,nothing
+            else
+               bc[Locb]=coe[i]
+            end
         end
-    end
-    @variable(model, lower)
-    cons[1]+=lower
-    @constraint(model, con[i=1:ltsupp], cons[i]==bc[i])
-    @objective(model, Max, lower)
-    optimize!(model)
-    status=termination_status(model)
-    if status == MOI.OPTIMAL
-       objv = objective_value(model)
-       println("optimum = $objv")
-    else
-       objv = objective_value(model)
-       println("termination status: $status")
-       sstatus=primal_status(model)
-       println("solution status: $sstatus")
-       println("optimum = $objv")
+        @variable(model, lower)
+        cons[1]+=lower
+        @constraint(model, con[i=1:ltsupp], cons[i]==bc[i])
+        @objective(model, Max, lower)
+        optimize!(model)
+        status=termination_status(model)
+        if status == MOI.OPTIMAL
+           objv = objective_value(model)
+           println("optimum = $objv")
+        else
+           objv = objective_value(model)
+           println("termination status: $status")
+           sstatus=primal_status(model)
+           println("solution status: $sstatus")
+           println("optimum = $objv")
+        end
     end
     return objv,tsupp
 end
 
-function blockcpop_mix(n,m,d,dg,supp,coe,fbasis,gbasis,cliques,cql,cliquesize,J,ncc,blocks,cl,blocksize;numeq=0,QUIET=false,obj="eigen")
+function blockcpop_mix(n,m,d,dg,supp,coe,fbasis,gbasis,cliques,cql,cliquesize,J,ncc,blocks,cl,blocksize;numeq=0,QUIET=false,obj="eigen",solve=true)
     tsupp=Vector{UInt16}[]
     for i=1:cql
         for j=1:cl[i][1], k=1:blocksize[i][1][j], r=k:blocksize[i][1][j]
@@ -226,130 +323,133 @@ function blockcpop_mix(n,m,d,dg,supp,coe,fbasis,gbasis,cliques,cql,cliquesize,J,
     end
     sort!(tsupp)
     unique!(tsupp)
-    ltsupp=length(tsupp)
-    model=Model(optimizer_with_attributes(Mosek.Optimizer))
-    set_optimizer_attribute(model, MOI.Silent(), QUIET)
-    cons=[AffExpr(0) for i=1:ltsupp]
-    pos1=Vector{Vector{Union{VariableRef,Symmetric{VariableRef}}}}(undef, cql)
-    for i=1:cql
-        pos1[i]=Vector{Union{VariableRef,Symmetric{VariableRef}}}(undef, cl[i][1])
-        for l=1:cl[i][1]
-            if blocksize[i][1][l]==1
-               @inbounds pos1[i][l]=@variable(model, lower_bound=0)
-               @inbounds bi=[fbasis[i][blocks[i][1][l][1]][end:-1:1]; fbasis[i][blocks[i][1][l][1]]]
-               if obj=="trace"
-                   bi=_cyclic_canon(bi)
-               end
-               Locb=ncbfind(tsupp,ltsupp,bi)
-               @inbounds cons[Locb]+=pos1[i][l]
-            else
-               @inbounds bs=blocksize[i][1][l]
-               @inbounds pos1[i][l]=@variable(model, [1:bs, 1:bs], PSD)
-               for t=1:bs, r=t:bs
-                   @inbounds ind1=blocks[i][1][l][t]
-                   @inbounds ind2=blocks[i][1][l][r]
-                   @inbounds bi=[fbasis[i][ind1][end:-1:1]; fbasis[i][ind2]]
-                   bi=_sym_canon(bi)
+    objv=nothing
+    if solve==true
+        ltsupp=length(tsupp)
+        model=Model(optimizer_with_attributes(Mosek.Optimizer))
+        set_optimizer_attribute(model, MOI.Silent(), QUIET)
+        cons=[AffExpr(0) for i=1:ltsupp]
+        pos1=Vector{Vector{Union{VariableRef,Symmetric{VariableRef}}}}(undef, cql)
+        for i=1:cql
+            pos1[i]=Vector{Union{VariableRef,Symmetric{VariableRef}}}(undef, cl[i][1])
+            for l=1:cl[i][1]
+                if blocksize[i][1][l]==1
+                   @inbounds pos1[i][l]=@variable(model, lower_bound=0)
+                   @inbounds bi=[fbasis[i][blocks[i][1][l][1]][end:-1:1]; fbasis[i][blocks[i][1][l][1]]]
                    if obj=="trace"
                        bi=_cyclic_canon(bi)
                    end
                    Locb=ncbfind(tsupp,ltsupp,bi)
-                   if t==r
-                      @inbounds cons[Locb]+=pos1[i][l][t,r]
-                   else
-                      @inbounds cons[Locb]+=2*pos1[i][l][t,r]
+                   @inbounds cons[Locb]+=pos1[i][l]
+                else
+                   @inbounds bs=blocksize[i][1][l]
+                   @inbounds pos1[i][l]=@variable(model, [1:bs, 1:bs], PSD)
+                   for t=1:bs, r=t:bs
+                       @inbounds ind1=blocks[i][1][l][t]
+                       @inbounds ind2=blocks[i][1][l][r]
+                       @inbounds bi=[fbasis[i][ind1][end:-1:1]; fbasis[i][ind2]]
+                       bi=_sym_canon(bi)
+                       if obj=="trace"
+                           bi=_cyclic_canon(bi)
+                       end
+                       Locb=ncbfind(tsupp,ltsupp,bi)
+                       if t==r
+                          @inbounds cons[Locb]+=pos1[i][l][t,r]
+                       else
+                          @inbounds cons[Locb]+=2*pos1[i][l][t,r]
+                       end
                    end
-               end
+                end
             end
         end
-    end
-    pos2=Vector{VariableRef}(undef, length(ncc))
-    for k=1:length(ncc)
-        i=ncc[k]
-        if i<=m-numeq
-            pos2[k]=@variable(model, lower_bound=0)
-        else
-            pos2[k]=@variable(model)
-        end
-        for j=1:length(supp[i+1])
-            bi=_sym_canon(supp[i+1][j])
-            if obj=="trace"
-                bi=_cyclic_canon(bi)
-            end
-            Locb=ncbfind(tsupp,ltsupp,bi)
-            cons[Locb]+=coe[i+1][j]*pos2[k]
-        end
-    end
-    p=1
-    pos3=Vector{Vector{Union{VariableRef,Symmetric{VariableRef}}}}(undef, m-length(ncc))
-    for i=1:cql, (j, w) in enumerate(J[i])
-        pos3[p]=Vector{Union{VariableRef,Symmetric{VariableRef}}}(undef,cl[i][j+1])
-        for l=1:cl[i][j+1]
-            bs=blocksize[i][j+1][l]
-            if bs==1
-                if j<=m-numeq
-                    pos3[p][l]=@variable(model, lower_bound=0)
-                else
-                    pos3[p][l]=@variable(model)
-                end
-                ind1=blocks[i][j+1][l][1]
-                for s=1:length(supp[w+1])
-                    @inbounds bi=[gbasis[i][j][ind1][end:-1:1]; supp[w+1][s]; gbasis[i][j][ind1]]
-                    bi=_sym_canon(bi)
-                    if obj=="trace"
-                        bi=_cyclic_canon(bi)
-                    end
-                    Locb=ncbfind(tsupp,ltsupp,bi)
-                    @inbounds cons[Locb]+=coe[w+1][s]*pos3[p][l]
-                end
+        pos2=Vector{VariableRef}(undef, length(ncc))
+        for k=1:length(ncc)
+            i=ncc[k]
+            if i<=m-numeq
+                pos2[k]=@variable(model, lower_bound=0)
             else
-                if j<=m-numeq
-                    pos3[p][l]=@variable(model, [1:bs, 1:bs], PSD)
-                else
-                    pos3[p][l]=@variable(model, [1:bs, 1:bs], Symmetric)
+                pos2[k]=@variable(model)
+            end
+            for j=1:length(supp[i+1])
+                bi=_sym_canon(supp[i+1][j])
+                if obj=="trace"
+                    bi=_cyclic_canon(bi)
                 end
-                for t=1:bs, r=1:bs
-                    ind1=blocks[i][j+1][l][t]
-                    ind2=blocks[i][j+1][l][r]
+                Locb=ncbfind(tsupp,ltsupp,bi)
+                cons[Locb]+=coe[i+1][j]*pos2[k]
+            end
+        end
+        p=1
+        pos3=Vector{Vector{Union{VariableRef,Symmetric{VariableRef}}}}(undef, m-length(ncc))
+        for i=1:cql, (j, w) in enumerate(J[i])
+            pos3[p]=Vector{Union{VariableRef,Symmetric{VariableRef}}}(undef,cl[i][j+1])
+            for l=1:cl[i][j+1]
+                bs=blocksize[i][j+1][l]
+                if bs==1
+                    if j<=m-numeq
+                        pos3[p][l]=@variable(model, lower_bound=0)
+                    else
+                        pos3[p][l]=@variable(model)
+                    end
+                    ind1=blocks[i][j+1][l][1]
                     for s=1:length(supp[w+1])
-                        @inbounds bi=[gbasis[i][j][ind1][end:-1:1]; supp[w+1][s]; gbasis[i][j][ind2]]
+                        @inbounds bi=[gbasis[i][j][ind1][end:-1:1]; supp[w+1][s]; gbasis[i][j][ind1]]
                         bi=_sym_canon(bi)
                         if obj=="trace"
                             bi=_cyclic_canon(bi)
                         end
                         Locb=ncbfind(tsupp,ltsupp,bi)
-                        @inbounds cons[Locb]+=coe[w+1][s]*pos3[p][l][t,r]
+                        @inbounds cons[Locb]+=coe[w+1][s]*pos3[p][l]
+                    end
+                else
+                    if j<=m-numeq
+                        pos3[p][l]=@variable(model, [1:bs, 1:bs], PSD)
+                    else
+                        pos3[p][l]=@variable(model, [1:bs, 1:bs], Symmetric)
+                    end
+                    for t=1:bs, r=1:bs
+                        ind1=blocks[i][j+1][l][t]
+                        ind2=blocks[i][j+1][l][r]
+                        for s=1:length(supp[w+1])
+                            @inbounds bi=[gbasis[i][j][ind1][end:-1:1]; supp[w+1][s]; gbasis[i][j][ind2]]
+                            bi=_sym_canon(bi)
+                            if obj=="trace"
+                                bi=_cyclic_canon(bi)
+                            end
+                            Locb=ncbfind(tsupp,ltsupp,bi)
+                            @inbounds cons[Locb]+=coe[w+1][s]*pos3[p][l][t,r]
+                        end
                     end
                 end
             end
+            p+=1
         end
-        p+=1
-    end
-    bc=zeros(ltsupp)
-    for i=1:length(supp[1])
-        Locb=ncbfind(tsupp,ltsupp,supp[1][i])
-        if Locb==0
-           @error "The monomial basis is not enough!"
-           return nothing,nothing
+        bc=zeros(ltsupp)
+        for i=1:length(supp[1])
+            Locb=ncbfind(tsupp,ltsupp,supp[1][i])
+            if Locb==0
+               @error "The monomial basis is not enough!"
+               return nothing,nothing
+            else
+               bc[Locb]=coe[1][i]
+            end
+        end
+        @variable(model, lower)
+        @constraint(model, cons[2:end].==bc[2:end])
+        @constraint(model, cons[1]+lower==bc[1])
+        @objective(model, Max, lower)
+        optimize!(model)
+        status=termination_status(model)
+        if status == MOI.OPTIMAL
+           objv = objective_value(model)
+           println("optimum = $objv")
         else
-           bc[Locb]=coe[1][i]
+           objv = objective_value(model)
+           println("termination status: $status")
+           sstatus=primal_status(model)
+           println("solution status: $sstatus")
+           println("optimum = $objv")
         end
-    end
-    @variable(model, lower)
-    @constraint(model, cons[2:end].==bc[2:end])
-    @constraint(model, cons[1]+lower==bc[1])
-    @objective(model, Max, lower)
-    optimize!(model)
-    status=termination_status(model)
-    if status == MOI.OPTIMAL
-       objv = objective_value(model)
-       println("optimum = $objv")
-    else
-       objv = objective_value(model)
-       println("termination status: $status")
-       sstatus=primal_status(model)
-       println("solution status: $sstatus")
-       println("optimum = $objv")
     end
     return objv,tsupp
 end
