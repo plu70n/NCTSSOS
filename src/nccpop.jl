@@ -164,11 +164,10 @@ function nctssos_higher!(data::cdata_type;TS="block",minimize=false,merge=false,
 end
 
 function get_ncgsupp(m,lt,supp,gbasis,gblocks,gcl,gblocksize)
-    gsupp=Vector{Vector{UInt16}}(undef, sum(lt[k+1]*sum(gblocksize[k].^2) for k=1:m))
-    l=1
-    for k=1:m, i=1:gcl[k], j=1:gblocksize[k][i], r=1:gblocksize[k][i], s=1:lt[k+1]
-        @inbounds gsupp[l]=[gbasis[k][gblocks[k][i][j]][end:-1:1]; supp[k+1][s]; gbasis[k][gblocks[k][i][r]]]
-        l+=1
+    gsupp=Vector{UInt16}[]
+    for k=1:m, i=1:gcl[k], j=1:gblocksize[k][i], r=j:gblocksize[k][i], s=1:lt[k+1]
+        @inbounds bi=[gbasis[k][gblocks[k][i][j]][end:-1:1]; supp[k+1][s]; gbasis[k][gblocks[k][i][r]]]
+        push!(gsupp, bi)
     end
     return gsupp
 end
@@ -240,14 +239,14 @@ function get_nccgraph(tsupp,supp,lt,basis;obj="eigen")
             if obj=="trace"
                 bi=_cyclic_canon(bi)
             end
-            if ncbfind(tsupp,ltsupp,bi)!=0
+            if ncbfind(tsupp, ltsupp, bi)!=0
                break
             else
                 r+=1
             end
         end
         if r<=lt
-           add_edge!(G,i,j)
+           add_edge!(G, i, j)
         end
     end
     return G
@@ -308,8 +307,6 @@ function get_nccblocks!(m,tsupp,gsupp,lt,fbasis,gbasis;gblocks=[],gcl=[],gblocks
         if merge==true
             fblocks,fcl,fblocksize=clique_merge!(fblocks,fcl,QUIET=true)
         end
-        fblocksize=length.(fblocks)
-        fcl=length(fblocksize)
         nub=unique(fblocksize)
         nsizes=[sum(fblocksize.== i) for i in nub]
         if isempty(ub)||nub!=ub||nsizes!=sizes
@@ -337,12 +334,10 @@ function get_nccblocks!(m,tsupp,gsupp,lt,fbasis,gbasis;gblocks=[],gcl=[],gblocks
 end
 
 function ncblockcpop(m,supp,coe,lt,fbasis,gbasis,fblocks,fcl,fblocksize,gblocks,gcl,gblocksize;numeq=0,QUIET=true,obj="eigen")
-    tsupp=Vector{Vector{UInt16}}(undef, Int(sum(fblocksize.^2+fblocksize)/2))
-    k=1
+    tsupp=Vector{UInt16}[]
     for i=1:fcl, j=1:fblocksize[i], r=j:fblocksize[i]
         @inbounds bi=[fbasis[fblocks[i][j]][end:-1:1]; fbasis[fblocks[i][r]]]
-        @inbounds tsupp[k]=bi
-        k+=1
+        @inbounds push!(tsupp, bi)
     end
     gsupp=get_ncgsupp(m,lt,supp,gbasis,gblocks,gcl,gblocksize)
     append!(tsupp, gsupp)
@@ -410,14 +405,18 @@ function ncblockcpop(m,supp,coe,lt,fbasis,gbasis,fblocks,fcl,fblocksize,gblocks,
                 else
                    gpos[k][i]=@variable(model, [1:bs, 1:bs], Symmetric)
                 end
-                for j=1:bs, r=1:bs, s=1:lt[k+1]
+                for j=1:bs, r=j:bs, s=1:lt[k+1]
                     @inbounds bi=[gbasis[k][gblocks[k][i][j]][end:-1:1]; supp[k+1][s]; gbasis[k][gblocks[k][i][r]]]
                     bi=_sym_canon(bi)
                     if obj=="trace"
                         bi=_cyclic_canon(bi)
                     end
                     Locb=ncbfind(tsupp,ltsupp,bi)
-                    @inbounds cons[Locb]+=coe[k+1][s]*gpos[k][i][j,r]
+                    if j==r
+                        @inbounds cons[Locb]+=coe[k+1][s]*gpos[k][i][j,r]
+                    else
+                        @inbounds cons[Locb]+=2*coe[k+1][s]*gpos[k][i][j,r]
+                    end
                 end
             end
         end
@@ -438,15 +437,12 @@ function ncblockcpop(m,supp,coe,lt,fbasis,gbasis,fblocks,fcl,fblocksize,gblocks,
     @objective(model, Max, lower)
     optimize!(model)
     status=termination_status(model)
-    if  status==MOI.OPTIMAL
-        objv=objective_value(model)
-        println("optimum = $objv")
-    else
-        objv=objective_value(model)
-        println("termination status: $status")
-        sstatus=primal_status(model)
-        println("solution status: $sstatus")
-        println("optimum = $objv")
+    objv = objective_value(model)
+    if status!=MOI.OPTIMAL
+       println("termination status: $status")
+       status=primal_status(model)
+       println("solution status: $status")
     end
+    println("optimum = $objv")
     return objv,tsupp
 end

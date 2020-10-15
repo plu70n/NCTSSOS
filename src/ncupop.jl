@@ -353,20 +353,24 @@ function ncbfind(A, l, a; rev=false)
     return 0
 end
 
-function get_ncgraph(tsupp,basis;obj="eigen")
+function get_ncgraph(tsupp,basis;obj="eigen",field="real",L=0,dim=1,PBC=false)
     lb=length(basis)
     G=SimpleGraph(lb)
     ltsupp=length(tsupp)
     for i = 1:lb, j = i+1:lb
         bi = [basis[i][end:-1:1]; basis[j]]
-        bi=_sym_canon(bi)
-        if obj=="trace"
-            bi=_cyclic_canon(bi)
+        if field=="real"
+            bi=_sym_canon(bi)
+            if obj=="trace"
+                bi=_cyclic_canon(bi)
+            end
+            # if nx>0
+            #     bi=comm(bi, nx)
+            #     proj!(bi)
+            # end
+        else
+            bi=reduce!(bi, L=L, dim=dim, PBC=PBC)[1]
         end
-        # if nx>0
-        #     bi=comm(bi, nx)
-        #     proj!(bi)
-        # end
         if ncbfind(tsupp, ltsupp, bi)!=0
            add_edge!(G, i, j)
         end
@@ -374,13 +378,13 @@ function get_ncgraph(tsupp,basis;obj="eigen")
     return G
 end
 
-function get_ncblocks(tsupp,basis;ub=[],sizes=[],TS="block",obj="eigen",minimize=false,QUIET=true,merge=false)
+function get_ncblocks(tsupp,basis;ub=[],sizes=[],TS="block",obj="eigen",minimize=false,QUIET=true,merge=false,field="real",L=0,dim=1,PBC=false)
     if TS==false
         blocksize=[length(basis)]
         blocks=[[i for i=1:length(basis)]]
         cl=1
     else
-        G=get_ncgraph(tsupp,basis,obj=obj)
+        G=get_ncgraph(tsupp,basis,obj=obj,field=field,L=L,dim=dim,PBC=PBC)
         if TS=="block"
             blocks=connected_components(G)
             blocksize=length.(blocks)
@@ -470,16 +474,13 @@ function ncblockupop(supp,coe,basis,blocks,cl,blocksize;QUIET=true,obj="eigen")
     @objective(model, Max, lower)
     optimize!(model)
     status=termination_status(model)
-    if status == MOI.OPTIMAL
-       objv = objective_value(model)
-       println("optimum = $objv")
-    else
-       objv = objective_value(model)
+    objv = objective_value(model)
+    if status!=MOI.OPTIMAL
        println("termination status: $status")
-       sstatus=primal_status(model)
-       println("solution status: $sstatus")
-       println("optimum = $objv")
+       status=primal_status(model)
+       println("solution status: $status")
     end
+    println("optimum = $objv")
     return objv,tsupp
 end
 

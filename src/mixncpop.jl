@@ -83,7 +83,7 @@ function cs_nctssos_first(supp::Vector{Vector{UInt16}},coe::Vector{Float64},n::I
     return opt,data
 end
 
-function cs_nctssos_higher!(data::mudata_type;TS="block",QUIET=false,solve=true)
+function cs_nctssos_higher!(data::mudata_type;TS="block",merge=false,QUIET=false,solve=true)
     n=data.n
     d=data.d
     supp=data.supp
@@ -99,8 +99,7 @@ function cs_nctssos_higher!(data::mudata_type;TS="block",QUIET=false,solve=true)
     blocksize=data.blocksize
     ub=data.ub
     sizes=data.sizes
-    blocks,cl,blocksize,ub,sizes,basis,status=get_blocks_mix(d,supp,cliques,cql,cliquesize,tsupp=tsupp,basis=basis,blocks=blocks,cl=cl,blocksize=blocksize,ub=ub,sizes=sizes,TS=TS,obj=obj)
-    blocks,cl,blocksize,ub,sizes,lt,fbasis,gbasis,status=get_cblocks_mix!(d,dg,J,m,supp,cliques,cql,cliquesize,tsupp=tsupp,lt=lt,fbasis=fbasis,gbasis=gbasis,blocks=blocks,cl=cl,blocksize=blocksize,ub=ub,sizes=sizes,TS=TS,obj=obj)
+    blocks,cl,blocksize,ub,sizes,basis,status=get_blocks_mix(d,supp,cliques,cql,cliquesize,basis=basis,ub=ub,sizes=sizes,TS=TS,merge=merge,obj=obj)
     if status==1
         opt,tsupp=blockupop_mix(n,d,supp,coe,basis,cliques,cql,cliquesize,blocks,cl,blocksize,obj=obj,solve=solve)
     else
@@ -284,16 +283,13 @@ function blockupop_mix(n,d,supp,coe,basis,cliques,cql,cliquesize,blocks,cl,block
         @objective(model, Max, lower)
         optimize!(model)
         status=termination_status(model)
-        if status == MOI.OPTIMAL
-           objv = objective_value(model)
-           println("optimum = $objv")
-        else
-           objv = objective_value(model)
+        objv = objective_value(model)
+        if status!=MOI.OPTIMAL
            println("termination status: $status")
-           sstatus=primal_status(model)
-           println("solution status: $sstatus")
-           println("optimum = $objv")
+           status=primal_status(model)
+           println("solution status: $status")
         end
+        println("optimum = $objv")
     end
     return objv,tsupp
 end
@@ -306,7 +302,7 @@ function blockcpop_mix(n,m,d,dg,supp,coe,fbasis,gbasis,cliques,cql,cliquesize,J,
             push!(tsupp, bi)
         end
         for (j, w) in enumerate(J[i])
-            for l=1:cl[i][j+1], t=1:blocksize[i][j+1][l], r=1:blocksize[i][j+1][l], s=1:length(supp[w+1])
+            for l=1:cl[i][j+1], t=1:blocksize[i][j+1][l], r=t:blocksize[i][j+1][l], s=1:length(supp[w+1])
                 ind1=blocks[i][j+1][l][t]
                 ind2=blocks[i][j+1][l][r]
                 @inbounds bi=[gbasis[i][j][ind1][end:-1:1]; supp[w+1][s]; gbasis[i][j][ind2]]
@@ -329,46 +325,41 @@ function blockcpop_mix(n,m,d,dg,supp,coe,fbasis,gbasis,cliques,cql,cliquesize,J,
         model=Model(optimizer_with_attributes(Mosek.Optimizer))
         set_optimizer_attribute(model, MOI.Silent(), QUIET)
         cons=[AffExpr(0) for i=1:ltsupp]
-        pos1=Vector{Vector{Union{VariableRef,Symmetric{VariableRef}}}}(undef, cql)
-        for i=1:cql
-            pos1[i]=Vector{Union{VariableRef,Symmetric{VariableRef}}}(undef, cl[i][1])
-            for l=1:cl[i][1]
-                if blocksize[i][1][l]==1
-                   @inbounds pos1[i][l]=@variable(model, lower_bound=0)
-                   @inbounds bi=[fbasis[i][blocks[i][1][l][1]][end:-1:1]; fbasis[i][blocks[i][1][l][1]]]
+        for i=1:cql, l=1:cl[i][1]
+            if blocksize[i][1][l]==1
+               @inbounds pos=@variable(model, lower_bound=0)
+               @inbounds bi=[fbasis[i][blocks[i][1][l][1]][end:-1:1]; fbasis[i][blocks[i][1][l][1]]]
+               if obj=="trace"
+                   bi=_cyclic_canon(bi)
+               end
+               Locb=ncbfind(tsupp,ltsupp,bi)
+               @inbounds cons[Locb]+=pos
+            else
+               @inbounds bs=blocksize[i][1][l]
+               @inbounds pos=@variable(model, [1:bs, 1:bs], PSD)
+               for t=1:bs, r=t:bs
+                   @inbounds ind1=blocks[i][1][l][t]
+                   @inbounds ind2=blocks[i][1][l][r]
+                   @inbounds bi=[fbasis[i][ind1][end:-1:1]; fbasis[i][ind2]]
+                   bi=_sym_canon(bi)
                    if obj=="trace"
                        bi=_cyclic_canon(bi)
                    end
-                   Locb=ncbfind(tsupp,ltsupp,bi)
-                   @inbounds cons[Locb]+=pos1[i][l]
-                else
-                   @inbounds bs=blocksize[i][1][l]
-                   @inbounds pos1[i][l]=@variable(model, [1:bs, 1:bs], PSD)
-                   for t=1:bs, r=t:bs
-                       @inbounds ind1=blocks[i][1][l][t]
-                       @inbounds ind2=blocks[i][1][l][r]
-                       @inbounds bi=[fbasis[i][ind1][end:-1:1]; fbasis[i][ind2]]
-                       bi=_sym_canon(bi)
-                       if obj=="trace"
-                           bi=_cyclic_canon(bi)
-                       end
-                       Locb=ncbfind(tsupp,ltsupp,bi)
-                       if t==r
-                          @inbounds cons[Locb]+=pos1[i][l][t,r]
-                       else
-                          @inbounds cons[Locb]+=2*pos1[i][l][t,r]
-                       end
+                   Locb=ncbfind(tsupp, ltsupp, bi)
+                   if t==r
+                      @inbounds cons[Locb]+=pos[t,r]
+                   else
+                      @inbounds cons[Locb]+=2*pos[t,r]
                    end
-                end
+               end
             end
         end
-        pos2=Vector{VariableRef}(undef, length(ncc))
         for k=1:length(ncc)
             i=ncc[k]
             if i<=m-numeq
-                pos2[k]=@variable(model, lower_bound=0)
+                pos=@variable(model, lower_bound=0)
             else
-                pos2[k]=@variable(model)
+                pos=@variable(model)
             end
             for j=1:length(supp[i+1])
                 bi=_sym_canon(supp[i+1][j])
@@ -376,20 +367,17 @@ function blockcpop_mix(n,m,d,dg,supp,coe,fbasis,gbasis,cliques,cql,cliquesize,J,
                     bi=_cyclic_canon(bi)
                 end
                 Locb=ncbfind(tsupp,ltsupp,bi)
-                cons[Locb]+=coe[i+1][j]*pos2[k]
+                cons[Locb]+=coe[i+1][j]*pos
             end
         end
-        p=1
-        pos3=Vector{Vector{Union{VariableRef,Symmetric{VariableRef}}}}(undef, m-length(ncc))
         for i=1:cql, (j, w) in enumerate(J[i])
-            pos3[p]=Vector{Union{VariableRef,Symmetric{VariableRef}}}(undef,cl[i][j+1])
             for l=1:cl[i][j+1]
                 bs=blocksize[i][j+1][l]
                 if bs==1
                     if j<=m-numeq
-                        pos3[p][l]=@variable(model, lower_bound=0)
+                        pos=@variable(model, lower_bound=0)
                     else
-                        pos3[p][l]=@variable(model)
+                        pos=@variable(model)
                     end
                     ind1=blocks[i][j+1][l][1]
                     for s=1:length(supp[w+1])
@@ -399,15 +387,15 @@ function blockcpop_mix(n,m,d,dg,supp,coe,fbasis,gbasis,cliques,cql,cliquesize,J,
                             bi=_cyclic_canon(bi)
                         end
                         Locb=ncbfind(tsupp,ltsupp,bi)
-                        @inbounds cons[Locb]+=coe[w+1][s]*pos3[p][l]
+                        @inbounds cons[Locb]+=coe[w+1][s]*pos
                     end
                 else
                     if j<=m-numeq
-                        pos3[p][l]=@variable(model, [1:bs, 1:bs], PSD)
+                        pos=@variable(model, [1:bs, 1:bs], PSD)
                     else
-                        pos3[p][l]=@variable(model, [1:bs, 1:bs], Symmetric)
+                        pos=@variable(model, [1:bs, 1:bs], Symmetric)
                     end
-                    for t=1:bs, r=1:bs
+                    for t=1:bs, r=t:bs
                         ind1=blocks[i][j+1][l][t]
                         ind2=blocks[i][j+1][l][r]
                         for s=1:length(supp[w+1])
@@ -417,12 +405,15 @@ function blockcpop_mix(n,m,d,dg,supp,coe,fbasis,gbasis,cliques,cql,cliquesize,J,
                                 bi=_cyclic_canon(bi)
                             end
                             Locb=ncbfind(tsupp,ltsupp,bi)
-                            @inbounds cons[Locb]+=coe[w+1][s]*pos3[p][l][t,r]
+                            if t==r
+                                @inbounds cons[Locb]+=coe[w+1][s]*pos[t,r]
+                            else
+                                @inbounds cons[Locb]+=2*coe[w+1][s]*pos[t,r]
+                            end
                         end
                     end
                 end
             end
-            p+=1
         end
         bc=zeros(ltsupp)
         for i=1:length(supp[1])
@@ -440,21 +431,18 @@ function blockcpop_mix(n,m,d,dg,supp,coe,fbasis,gbasis,cliques,cql,cliquesize,J,
         @objective(model, Max, lower)
         optimize!(model)
         status=termination_status(model)
-        if status == MOI.OPTIMAL
-           objv = objective_value(model)
-           println("optimum = $objv")
-        else
-           objv = objective_value(model)
+        objv = objective_value(model)
+        if status!=MOI.OPTIMAL
            println("termination status: $status")
-           sstatus=primal_status(model)
-           println("solution status: $sstatus")
-           println("optimum = $objv")
+           status=primal_status(model)
+           println("solution status: $status")
         end
+        println("optimum = $objv")
     end
     return objv,tsupp
 end
 
-function get_blocks_mix(d,supp,cliques,cql,cliquesize;basis=[],ub=[],sizes=[],TS="block",merge=false,obj="eigen")
+function get_blocks_mix(d,supp,cliques,cql,cliquesize;basis=[],ub=[],sizes=[],TS="block",merge=false,obj="eigen",field="real",reduce=false,L=0,dim=1)
     blocks=Vector{Vector{Vector{UInt16}}}(undef,cql)
     cl=Vector{UInt16}(undef,cql)
     blocksize=Vector{Vector{Int}}(undef,cql)
@@ -473,13 +461,17 @@ function get_blocks_mix(d,supp,cliques,cql,cliquesize;basis=[],ub=[],sizes=[],TS
         tsupp=copy(supp[ind])
         if flag==1
             basis[i]=get_ncbasis(nvar, d, ind=cliques[i])
+            if field=="complex"
+                basis[i]=basis[i][is_basis.(basis[i], L=L, d=d, dim=dim, reduce=reduce)]
+            else
             # if nx>0
             #      basis[i]=basis[i][is_basis.(basis[i], nx)]
             # end
-            if obj=="trace"
-                append!(tsupp, [_cyclic_canon([basis[i][k][end:-1:1]; basis[i][k]]) for k=1:length(basis[i])])
-            else
-                append!(tsupp, [[basis[i][k][end:-1:1]; basis[i][k]] for k=1:length(basis[i])])
+                if obj=="trace"
+                    append!(tsupp, [_cyclic_canon([basis[i][k][end:-1:1]; basis[i][k]]) for k=1:length(basis[i])])
+                else
+                    append!(tsupp, [[basis[i][k][end:-1:1]; basis[i][k]] for k=1:length(basis[i])])
+                end
             end
             # if nx>0
             #     tsupp=comm.(tsupp, nx)
@@ -487,9 +479,9 @@ function get_blocks_mix(d,supp,cliques,cql,cliquesize;basis=[],ub=[],sizes=[],TS
             # end
             sort!(tsupp)
             unique!(tsupp)
-            blocks[i],cl[i],blocksize[i],ub[i],sizes[i],status[i]=get_ncblocks(tsupp,basis[i],TS=TS,obj=obj,QUIET=true,merge=merge)
+            blocks[i],cl[i],blocksize[i],ub[i],sizes[i],status[i]=get_ncblocks(tsupp,basis[i],TS=TS,obj=obj,QUIET=true,merge=merge,field=field,L=L,dim=dim)
         else
-            blocks[i],cl[i],blocksize[i],ub[i],sizes[i],status[i]=get_ncblocks(tsupp,basis[i],ub=ub[i],sizes=sizes[i],TS=TS,obj=obj,QUIET=true,merge=merge)
+            blocks[i],cl[i],blocksize[i],ub[i],sizes[i],status[i]=get_ncblocks(tsupp,basis[i],ub=ub[i],sizes=sizes[i],TS=TS,obj=obj,QUIET=true,merge=merge,field=field,L=L,dim=dim)
         end
     end
     return blocks,cl,blocksize,ub,sizes,basis,maximum(status)
@@ -503,11 +495,11 @@ function get_cblocks_mix!(d,dg,J,m,supp,cliques,cql,cliquesize;tsupp=[],lt=[],fb
         ub=Vector{Vector{UInt16}}(undef,cql)
         sizes=Vector{Vector{UInt16}}(undef,cql)
         lt=Vector{Vector{UInt16}}(undef,cql)
-        gbasis=Vector{Vector{Vector{Vector{UInt16}}}}(undef,cql)
         fbasis=Vector{Vector{Vector{UInt16}}}(undef,cql)
+        gbasis=Vector{Vector{Vector{Vector{UInt16}}}}(undef,cql)
         tsupp=copy(supp[1])
         for i=2:m+1
-            append!(tsupp, supp[i])
+            append!(tsupp,  _sym_canon.(supp[i]))
         end
         sort!(tsupp)
         unique!(tsupp)
@@ -515,7 +507,7 @@ function get_cblocks_mix!(d,dg,J,m,supp,cliques,cql,cliquesize;tsupp=[],lt=[],fb
     else
         flag=0
     end
-    status=ones(UInt8,cql)
+    status=ones(UInt8, cql)
     for i=1:cql
         lc=length(J[i])
         nvar=cliquesize[i]
