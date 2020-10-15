@@ -19,7 +19,7 @@ using NCTSSOS
 using DynamicPolynomials
 @ncpolyvar x[1:3]
 obj = 1+x[1]^4+x[2]^4+x[3]^4+x[1]*x[2]*x[3]+x[2]
-opt,data = nctssos_first(obj,x,TS="MD",obj="eigen")
+opt,data = nctssos_first(obj, x, TS="MD", obj="eigen")
 ```
 
 Two vectors will be outputed. The first vector is the sizes of blocks and the second vector is the numbers of blocks with sizes corresponding to the first vector.
@@ -27,7 +27,7 @@ Two vectors will be outputed. The first vector is the sizes of blocks and the se
 To exetute higher levels of the NCTSSOS hierarchy, repeatedly run
 
 ```Julia
-opt,data = nctssos_higher!(data,TS="MD")
+opt,data = nctssos_higher!(data, TS="MD")
 ```
 
 Options:   
@@ -39,18 +39,18 @@ Taking f=2-x1^2+x1\*x2^2\*x1-x2^2 and g_1=4-x1^2-x2^2, g_2=x1\*x2+x2\*x1-2 as an
 
 ```Julia
 @ncpolyvar x[1:2]
-obj=2-x[1]^2+x[1]*x[2]^2*x[1]-x[2]^2
-ineq=[4-x[1]^2-x[2]^2, x[1]*x[2]+x[2]*x[1]-2]
-eq=[]
-pop=[obj; ineq; eq]
-d=2 # the relaxation order
-opt,data=nctssos_first(pop,x,d,TS="MD",obj="eigen")
+obj = 2-x[1]^2+x[1]*x[2]^2*x[1]-x[2]^2
+ineq = [4-x[1]^2-x[2]^2, x[1]*x[2]+x[2]*x[1]-2]
+eq = []
+pop = [obj; ineq; eq]
+d = 2 # the relaxation order
+opt,data = nctssos_first(pop, x, d, TS="MD", obj="eigen")
 ```
 
 To exetute higher levels of the NCTSSOS hierarchy, repeatedly run
 
 ```Julia
-opt,data = nctssos_higher!(data,TS="MD")
+opt,data = nctssos_higher!(data, TS="MD")
 ```
 
 Options:  
@@ -59,15 +59,15 @@ TS: "block" (using the maxmial chordal extension), "MD" or "MF" (using approxima
 
 To use combined correlative-term sparsity, run
 ```Julia
-opt,data=cs_nctssos_first(pop,x,n,d,TS="block",obj="eigen")
+opt,data = cs_nctssos_first(pop, x, d, TS="block", obj="eigen")
 ```
 and
 ```Julia
-opt,data=cs_nctssos_higher!(data,TS="MD")
+opt,data = cs_nctssos_higher!(data, TS="MD")
 ```
 
 ## References
-[1] [Exploiting Term Sparsity in Noncommutative Polynomial Optimization](https://arxiv.org/abs/2010.06956)  
+[1] [Exploiting Term Sparsity in Noncommutative Polynomial Optimization](https://arxiv.org/abs/2010.06956), 2020.  
 
 ## Contact
 [Jie Wang](https://wangjie212.github.io/jiewang/): jwang@laas.fr
