@@ -13,7 +13,7 @@ pkg> add https://github.com/wangjie212/NCTSSOS
 NCTSSOS has been tested on WINDOW 10, Julia 1.2, JuMP 0.21 and MOSEK 8.1.
 ## Usage
 ### Unconstrained nc polynomial optimization problems
-Taking f=1+x1^4+x2^4+x3^4+x1\*x2\*x3+x2 as an example, to exetute the first level of the NCTSSOS hierarchy, run
+Taking f=1+x1^4+x2^4+x3^4+x1\*x2\*x3+x2 as an example, to execute the first level of the NCTSSOS hierarchy, run
 ```Julia
 using NCTSSOS
 using DynamicPolynomials
@@ -24,7 +24,7 @@ opt,data = nctssos_first(obj, x, TS="MD", obj="eigen")
 
 Two vectors will be outputed. The first vector is the sizes of blocks and the second vector is the numbers of blocks with sizes corresponding to the first vector.
 
-To exetute higher levels of the NCTSSOS hierarchy, repeatedly run
+To execute higher levels of the NCTSSOS hierarchy, repeatedly run
 
 ```Julia
 opt,data = nctssos_higher!(data, TS="MD")
@@ -35,7 +35,7 @@ obj: "eigen" (implement the eigenvalue optimization), "trace" (implement the tra
 TS (term sparsity): "block" (using the maxmial chordal extension), "MD" or "MF" (using approximately minimum chordal extention), false (without term sparsity)  
 
 ### Constrained nc polynomial optimization problems
-Taking f=2-x1^2+x1\*x2^2\*x1-x2^2 and g_1=4-x1^2-x2^2, g_2=x1\*x2+x2\*x1-2 as an example, to exetute the first level of the NCTSSOS hierarchy, run
+Taking f=2-x1^2+x1\*x2^2\*x1-x2^2 and g_1=4-x1^2-x2^2, g_2=x1\*x2+x2\*x1-2 as an example, to execute the first level of the NCTSSOS hierarchy, run
 
 ```Julia
 @ncpolyvar x[1:2]
@@ -47,7 +47,7 @@ d = 2 # the relaxation order
 opt,data = nctssos_first(pop, x, d, TS="MD", obj="eigen")
 ```
 
-To exetute higher levels of the NCTSSOS hierarchy, repeatedly run
+To execute higher levels of the NCTSSOS hierarchy, repeatedly run
 
 ```Julia
 opt,data = nctssos_higher!(data, TS="MD")
