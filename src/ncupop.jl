@@ -30,6 +30,7 @@ function nctssos_first(f::Polynomial{false, T} where T<:Number, x::Vector{PolyVa
     end
     if newton==true
         if obj=="trace"
+            d=Int(maximum(length.(supp))/2)
             basis=newton_cyclic(supp, n, d)
         else
             basis=newton_ncbasis(supp)
