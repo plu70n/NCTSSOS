@@ -13,12 +13,12 @@ pkg> add https://github.com/wangjie212/NCTSSOS
 NCTSSOS has been tested on WINDOW 10, Julia 1.2, JuMP 0.21 and MOSEK 8.1.
 ## Usage
 ### Unconstrained nc polynomial optimization problems
-Taking f=1+x1^4+x2^4+x3^4+x1\*x2+x2\*x3 as an example, to execute the first level of the NCTSSOS hierarchy, run
+Taking f=1+x1^4+x2^4+x3^4+x1\*x2+x2\*x1+x2\*x3+x3\*x2 as an example, to execute the first level of the NCTSSOS hierarchy, run
 ```Julia
 using NCTSSOS
 using DynamicPolynomials
 @ncpolyvar x[1:3]
-obj = 1+x[1]^4+x[2]^4+x[3]^4+x[1]*x[2]+x[2]*x[3]
+obj = 1+x[1]^4+x[2]^4+x[3]^4+x[1]*x[2]+x[2]*x[1]+x[2]*x[3]+x[3]*x[2]
 opt,data = nctssos_first(obj, x, TS="MD", obj="eigen")
 ```
 
