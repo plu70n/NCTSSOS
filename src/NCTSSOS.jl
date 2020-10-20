@@ -17,6 +17,6 @@ include("mixncpop.jl")
 include("clique_merge.jl")
 include("ncupop.jl")
 include("nccpop.jl")
-include("ncpop_complex.jl")
+# include("ncpop_complex.jl")
 
 end
