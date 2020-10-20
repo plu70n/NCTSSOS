@@ -22,7 +22,7 @@ obj = 1+x[1]^4+x[2]^4+x[3]^4+x[1]*x[2]*x[3]+x[2]
 opt,data = nctssos_first(obj, x, TS="MD", obj="eigen")
 ```
 
-Two vectors will be outputed. The first vector is the sizes of blocks and the second vector is the numbers of blocks with sizes corresponding to the first vector.
+Two vectors will be output. The first vector includes the sizes of blocks and the second vector includes the numbers of blocks with sizes corresponding to the first vector.
 
 To execute higher levels of the NCTSSOS hierarchy, repeatedly run
 
@@ -31,7 +31,7 @@ opt,data = nctssos_higher!(data, TS="MD")
 ```
 
 Options:   
-obj: "eigen" (implement the eigenvalue optimization), "trace" (implement the trace optimization)  
+obj: "eigen" (implements the eigenvalue optimization), "trace" (implements the trace optimization)  
 TS (term sparsity): "block" (using the maxmial chordal extension), "MD" or "MF" (using approximately minimum chordal extention), false (without term sparsity)  
 
 ### Constrained nc polynomial optimization problems
