@@ -44,7 +44,7 @@ ineq = [4-x[1]^2-x[2]^2]
 eq = [x[1]*x[2]+x[2]*x[1]-2]
 pop = [obj; ineq; eq]
 d = 2 # the relaxation order
-opt,data = nctssos_first(pop, x, d, TS="MD", obj="eigen")
+opt,data = nctssos_first(pop, x, d, numeq=1, TS="MD", obj="eigen")
 ```
 
 To execute higher levels of the NCTSSOS hierarchy, repeatedly run
