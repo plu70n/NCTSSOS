@@ -1,5 +1,5 @@
 # NCTSSOS
-NCTSSOS is a sparse non-commutative polynomial optimization tool based on block moment-SOHS hierarchies. To use NCTSSOS in Julia, run
+NCTSSOS is a sparse non-commutative polynomial optimization tool based on the sparsity adapted moment-SOHS hierarchies. To use NCTSSOS in Julia, run
 ```Julia
 pkg> add https://github.com/wangjie212/NCTSSOS
  ```
