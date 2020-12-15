@@ -442,7 +442,7 @@ function blockcpop_mix(n,m,d,dg,supp,coe,fbasis,gbasis,cliques,cql,cliquesize,J,
     return objv,tsupp
 end
 
-function get_blocks_mix(d,supp,cliques,cql,cliquesize;basis=[],ub=[],sizes=[],TS="block",merge=false,obj="eigen",field="real",reduce=false,L=0,dim=1)
+function get_blocks_mix(d,supp,cliques,cql,cliquesize;basis=[],ub=[],sizes=[],TS="block",merge=false,obj="eigen")
     blocks=Vector{Vector{Vector{UInt16}}}(undef,cql)
     cl=Vector{UInt16}(undef,cql)
     blocksize=Vector{Vector{Int}}(undef,cql)
@@ -461,17 +461,13 @@ function get_blocks_mix(d,supp,cliques,cql,cliquesize;basis=[],ub=[],sizes=[],TS
         tsupp=copy(supp[ind])
         if flag==1
             basis[i]=get_ncbasis(nvar, d, ind=cliques[i])
-            if field=="complex"
-                basis[i]=basis[i][is_basis.(basis[i], L=L, d=d, dim=dim, reduce=reduce)]
-            else
             # if nx>0
             #      basis[i]=basis[i][is_basis.(basis[i], nx)]
             # end
-                if obj=="trace"
-                    append!(tsupp, [_cyclic_canon([basis[i][k][end:-1:1]; basis[i][k]]) for k=1:length(basis[i])])
-                else
-                    append!(tsupp, [[basis[i][k][end:-1:1]; basis[i][k]] for k=1:length(basis[i])])
-                end
+            if obj=="trace"
+                append!(tsupp, [_cyclic_canon([basis[i][k][end:-1:1]; basis[i][k]]) for k=1:length(basis[i])])
+            else
+                append!(tsupp, [[basis[i][k][end:-1:1]; basis[i][k]] for k=1:length(basis[i])])
             end
             # if nx>0
             #     tsupp=comm.(tsupp, nx)
@@ -479,9 +475,9 @@ function get_blocks_mix(d,supp,cliques,cql,cliquesize;basis=[],ub=[],sizes=[],TS
             # end
             sort!(tsupp)
             unique!(tsupp)
-            blocks[i],cl[i],blocksize[i],ub[i],sizes[i],status[i]=get_ncblocks(tsupp,basis[i],TS=TS,obj=obj,QUIET=true,merge=merge,field=field,L=L,dim=dim)
+            blocks[i],cl[i],blocksize[i],ub[i],sizes[i],status[i]=get_ncblocks(tsupp,basis[i],TS=TS,obj=obj,QUIET=true,merge=merge)
         else
-            blocks[i],cl[i],blocksize[i],ub[i],sizes[i],status[i]=get_ncblocks(tsupp,basis[i],ub=ub[i],sizes=sizes[i],TS=TS,obj=obj,QUIET=true,merge=merge,field=field,L=L,dim=dim)
+            blocks[i],cl[i],blocksize[i],ub[i],sizes[i],status[i]=get_ncblocks(tsupp,basis[i],ub=ub[i],sizes=sizes[i],TS=TS,obj=obj,QUIET=true,merge=merge)
         end
     end
     return blocks,cl,blocksize,ub,sizes,basis,maximum(status)

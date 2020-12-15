@@ -354,24 +354,20 @@ function ncbfind(A, l, a; rev=false)
     return 0
 end
 
-function get_ncgraph(tsupp,basis;obj="eigen",field="real",L=0,dim=1,PBC=false)
+function get_ncgraph(tsupp,basis;obj="eigen")
     lb=length(basis)
     G=SimpleGraph(lb)
     ltsupp=length(tsupp)
     for i = 1:lb, j = i+1:lb
         bi = [basis[i][end:-1:1]; basis[j]]
-        if field=="real"
-            bi=_sym_canon(bi)
-            if obj=="trace"
-                bi=_cyclic_canon(bi)
-            end
-            # if nx>0
-            #     bi=comm(bi, nx)
-            #     proj!(bi)
-            # end
-        else
-            bi=reduce!(bi, L=L, dim=dim, PBC=PBC)[1]
+        bi=_sym_canon(bi)
+        if obj=="trace"
+            bi=_cyclic_canon(bi)
         end
+        # if nx>0
+        #     bi=comm(bi, nx)
+        #     proj!(bi)
+        # end
         if ncbfind(tsupp, ltsupp, bi)!=0
            add_edge!(G, i, j)
         end
@@ -379,13 +375,13 @@ function get_ncgraph(tsupp,basis;obj="eigen",field="real",L=0,dim=1,PBC=false)
     return G
 end
 
-function get_ncblocks(tsupp,basis;ub=[],sizes=[],TS="block",obj="eigen",minimize=false,QUIET=true,merge=false,field="real",L=0,dim=1,PBC=false)
+function get_ncblocks(tsupp,basis;ub=[],sizes=[],TS="block",obj="eigen",minimize=false,QUIET=true,merge=false)
     if TS==false
         blocksize=[length(basis)]
         blocks=[[i for i=1:length(basis)]]
         cl=1
     else
-        G=get_ncgraph(tsupp,basis,obj=obj,field=field,L=L,dim=dim,PBC=PBC)
+        G=get_ncgraph(tsupp,basis,obj=obj)
         if TS=="block"
             blocks=connected_components(G)
             blocksize=length.(blocks)
