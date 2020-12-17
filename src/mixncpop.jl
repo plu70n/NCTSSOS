@@ -41,7 +41,7 @@ mutable struct mudata_type
     sizes::Vector{Vector{UInt16}}
 end
 
-function cs_nctssos_first(f,x;d=0,CS="MD",minimize=false,TS="block",QUIET=false,obj="eigen",solve=true)
+function cs_nctssos_first(f,x;d=0,CS="MF",minimize=true,TS="block",QUIET=false,obj="eigen",solve=true)
     n=length(x)
     mon=monomials(f)
     coe=coefficients(f)
@@ -70,7 +70,7 @@ function cs_nctssos_first(f,x;d=0,CS="MD",minimize=false,TS="block",QUIET=false,
     return opt,data
 end
 
-function cs_nctssos_first(supp::Vector{Vector{UInt16}},coe::Vector{Float64},n::Int;d=0,CS="MD",minimize=false,TS="block",QUIET=false,obj="eigen",solve=true)
+function cs_nctssos_first(supp::Vector{Vector{UInt16}},coe::Vector{Float64},n::Int;d=0,CS="MF",minimize=true,TS="block",QUIET=false,obj="eigen",solve=true)
     if obj=="trace"
         supp, coe=cyclic_canon(supp, coe)
     else
@@ -115,7 +115,7 @@ function cs_nctssos_higher!(data::mudata_type;TS="block",merge=false,QUIET=false
     return opt,data
 end
 
-function cs_nctssos_first(pop,x,d;numeq=0,CS="MD",minimize=false,assign="min",TS="block",QUIET=false,obj="eigen",solve=true)
+function cs_nctssos_first(pop,x,d;numeq=0,CS="MF",minimize=true,assign="first",TS="block",QUIET=false,obj="eigen",solve=true)
     n=length(x)
     m=length(pop)-1
     coe=Vector{Vector{Float64}}(undef, m+1)
@@ -151,7 +151,7 @@ function cs_nctssos_first(pop,x,d;numeq=0,CS="MD",minimize=false,assign="min",TS
     return opt,data
 end
 
-function cs_nctssos_first(supp::Vector{Vector{Vector{UInt16}}},coe::Vector{Vector{Float64}},n::Int,d::Int,dg::Vector{Int};numeq=0,CS="MD",minimize=false,assign="min",TS="block",QUIET=false,obj="eigen",solve=true)
+function cs_nctssos_first(supp::Vector{Vector{Vector{UInt16}}},coe::Vector{Vector{Float64}},n::Int,d::Int,dg::Vector{Int};numeq=0,CS="MF",minimize=true,assign="first",TS="block",QUIET=false,obj="eigen",solve=true)
     m=length(supp)-1
     if obj=="trace"
         supp[1], coe[1]=cyclic_canon(supp[1], coe[1])
@@ -573,7 +573,7 @@ function assign_constraint(m,supp,cliques,cql,cliquesize;assign="first")
     return J,ncc
 end
 
-function clique_decomp(n::Int,supp::Vector{Vector{UInt16}};alg="MD",minimize=false)
+function clique_decomp(n::Int,supp::Vector{Vector{UInt16}};alg="MF",minimize=true)
     if alg==false
         cliques=[UInt16[i for i=1:n]]
         cql=1
@@ -597,7 +597,7 @@ function clique_decomp(n::Int,supp::Vector{Vector{UInt16}};alg="MD",minimize=fal
     return cliques,cql,cliquesize
 end
 
-function clique_decomp(n::Int,m::Int,d::Int,dg::Vector{Int},supp::Vector{Vector{Vector{UInt16}}};alg="MD",minimize=false)
+function clique_decomp(n::Int,m::Int,d::Int,dg::Vector{Int},supp::Vector{Vector{Vector{UInt16}}};alg="MF",minimize=true)
     if alg==false
         cliques=[UInt16[i for i=1:n]]
         cql=1
