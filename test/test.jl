@@ -1,6 +1,6 @@
 using DynamicPolynomials
-include("E:\\Programs\\NCTSSOS\\src\\NCTSSOS.jl")
-using .NCTSSOS
+# include("E:\\Programs\\NCTSSOS\\src\\NCTSSOS.jl")
+using NCTSSOS
 
 n = 3
 @ncpolyvar x[1:3]
