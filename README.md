@@ -4,6 +4,10 @@ NCTSSOS is a sparse non-commutative polynomial optimization tool based on the sp
 pkg> add https://github.com/wangjie212/NCTSSOS
  ```
 
+ | **Documentation** |
+ |:-----------------:|
+ | [![](https://img.shields.io/badge/docs-latest-blue.svg)](https://wangjie212.github.io/NCTSSOS/dev) |
+
 ## Dependencies
 - MultivariatePolynomials
 - Julia
