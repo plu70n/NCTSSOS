@@ -92,7 +92,7 @@ function MinimalChordal!(G, order, F)
     return G,MCS(G)
 end
 
-function GreedyOrder!(G; method="MF", minimize=true)
+function GreedyOrder!(G; method="MF", minimize=false)
     n=nv(G)
     H=copy(G)
     order=zeros(UInt16,n)
@@ -155,7 +155,7 @@ function GreedyOrder!(G; method="MF", minimize=true)
     return G,order
 end
 
-function chordal_cliques!(G; method="MF", minimize=true)
+function chordal_cliques!(G; method="MF", minimize=false)
     G, order=GreedyOrder!(G, method=method, minimize=minimize)
     n=nv(G)
     candidate_cliques=Vector{Vector{UInt16}}(undef, n)
@@ -186,7 +186,7 @@ function add_clique!(G, nodes)
 end
 
 function max_cliques(G)
-    cliques=maximal_cliques(G)
+    cliques=convert(Vector{Vector{UInt16}}, maximal_cliques(G))
     sort!.(cliques)
     cliquesize=length.(cliques)
     cql=length(cliquesize)
