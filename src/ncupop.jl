@@ -1,6 +1,8 @@
 mutable struct ncupop_type
     supp # support data
     coe # coefficient data
+    partition # the first 'partition' variables commutes with the remaining variables
+    constraint # "projection" or "unipotent"
     basis # basis
     obj # "eigen" or "trace"
     ksupp # extending support at the k-th step
@@ -24,24 +26,27 @@ If `merge=true`, perform the PSD block merging. Return the optimum and other aux
 - `x`: the set of noncommuting variables.
 - `md`: the tunable parameter for merging blocks.
 """
-function nctssos_first(f::Polynomial{false, T} where T<:Number, x::Vector{PolyVar{false}};
-    newton=true, reducebasis=true, TS="block", obj="eigen", merge=false, md=3, solve=true, QUIET=false)
+function nctssos_first(f::Polynomial{false, T} where T<:Number, x::Vector{PolyVar{false}}; d=0, newton=true, reducebasis=true,
+    monosquare=true, TS="block", obj="eigen", partition=0, constraint=nothing, merge=false, md=3, solve=true, QUIET=false)
     n,supp,coe = poly_info(f, x)
-    opt,data = nctssos_first(supp, coe, n, newton=newton, reducebasis=reducebasis, TS=TS, obj=obj, merge=merge, md=md, solve=solve, QUIET=QUIET)
+    opt,data = nctssos_first(supp, coe, n, d=d, newton=newton, reducebasis=reducebasis, monosquare=monosquare, TS=TS, obj=obj,
+    partition=partition, constraint=constraint, merge=merge, md=md, solve=solve, QUIET=QUIET)
     return opt,data
 end
 
-function nctssos_first(supp::Vector{Vector{UInt16}}, coe, n::Int; newton=true, reducebasis=true,
-    TS="block", obj="eigen", merge=false, md=3, solve=true, QUIET=false)
+function nctssos_first(supp::Vector{Vector{UInt16}}, coe, n::Int; d=0, newton=true, reducebasis=true, monosquare=true,
+    TS="block", obj="eigen", partition=0, constraint=nothing, merge=false, md=3, solve=true, QUIET=false)
     println("************************NCTSSOS************************")
     println("NCTSSOS is launching...")
-    d = Int(maximum(length.(supp))/2)
+    if d == 0
+        d = Int(maximum(length.(supp))/2)
+    end
     if obj == "trace"
         supp,coe = cyclic_canon(supp, coe)
     else
         supp,coe = sym_canon(supp, coe)
     end
-    if newton == true
+    if newton == true && d == 0
         if obj == "trace"
             basis = newton_cyclic(supp, n, d)
         else
@@ -50,32 +55,50 @@ function nctssos_first(supp::Vector{Vector{UInt16}}, coe, n::Int; newton=true, r
     else
         basis = get_ncbasis(n, d)
     end
-    ksupp = copy(supp)
-    if obj == "trace"
-        append!(ksupp, [_cyclic_canon([basis[i][end:-1:1]; basis[i]]) for i=1:length(basis)])
-    else
-        append!(ksupp, [[basis[i][end:-1:1]; basis[i]] for i=1:length(basis)])
+    if partition > 0
+        ind = [_comm(basis[i], partition) == basis[i] for i=1:length(basis)]
+        basis = basis[ind]
     end
-    sort!(ksupp)
-    unique!(ksupp)
+    if constraint != nothing
+        ind = [findfirst(j -> basis[i][j]== basis[i][j+1], 1:length(basis[i])-1) == nothing for i=1:length(basis)]
+        basis = basis[ind]
+    end
+    ksupp = copy(supp)
+    if monosquare == true && TS != false
+        if obj == "trace"
+            append!(ksupp, [_cyclic_canon([basis[i][end:-1:1]; basis[i]]) for i=1:length(basis)])
+        else
+            append!(ksupp, [[basis[i][end:-1:1]; basis[i]] for i=1:length(basis)])
+        end
+        if partition > 0
+            ksupp = _comm.(ksupp, partition)
+        end
+        if constraint != nothing
+            reduce_cons!.(ksupp, constraint = constraint)
+        end
+        sort!(ksupp)
+        unique!(ksupp)
+    end
     if TS != false && QUIET == false
         println("Starting to compute the block structure...")
     end
-    blocks,cl,blocksize,sb,numb,_ = get_ncblocks(ksupp, basis, TS=TS, QUIET=QUIET, merge=merge, md=md, obj=obj)
-    if reducebasis == true && obj == "eigen"
+    blocks,cl,blocksize,sb,numb,_ = get_ncblocks(ksupp, basis, TS=TS, QUIET=QUIET, merge=merge, md=md, obj=obj, partition=partition, constraint=constraint)
+    if reducebasis == true && obj == "eigen" && d == 0
         psupp = copy(supp)
         psupp = psupp[is_sym.(psupp)]
         push!(psupp, UInt16[])
         basis,flag = reducebasis!(psupp, basis, blocks, cl, blocksize)
         if flag == 1
             ksupp = copy(supp)
-            if obj == "trace"
-                append!(ksupp, [_cyclic_canon([basis[i][end:-1:1]; basis[i]]) for i=1:length(basis)])
-            else
-                append!(ksupp, [[basis[i][end:-1:1]; basis[i]] for i=1:length(basis)])
+            if monosquare == true
+                if obj == "trace"
+                    append!(ksupp, [_cyclic_canon([basis[i][end:-1:1]; basis[i]]) for i=1:length(basis)])
+                else
+                    append!(ksupp, [[basis[i][end:-1:1]; basis[i]] for i=1:length(basis)])
+                end
+                sort!(ksupp)
+                unique!(ksupp)
             end
-            sort!(ksupp)
-            unique!(ksupp)
             blocks,cl,blocksize,sb,numb,_ = get_ncblocks(ksupp, basis, TS=TS, QUIET=QUIET, merge=merge, md=md, obj=obj)
         end
     end
@@ -83,8 +106,8 @@ function nctssos_first(supp::Vector{Vector{UInt16}}, coe, n::Int; newton=true, r
         mb = maximum(maximum.(sb))
         println("Obtained the block structure. The maximal size of blocks is $mb.")
     end
-    opt,ksupp = ncblockupop(supp, coe, basis, blocks, cl, blocksize, QUIET=QUIET, obj=obj, solve=solve)
-    data = ncupop_type(supp, coe, basis, obj, ksupp, sb, numb)
+    opt,ksupp = ncblockupop(supp, coe, basis, blocks, cl, blocksize, QUIET=QUIET, obj=obj, partition=partition, constraint=constraint, solve=solve)
+    data = ncupop_type(supp, coe, partition, constraint, basis, obj, ksupp, sb, numb)
     return opt,data
 end
 
@@ -116,6 +139,8 @@ function nctssos_higher!(data::ncupop_type; TS="block", merge=false, md=3, solve
     supp = data.supp
     basis = data.basis
     coe = data.coe
+    partition = data.partition
+    constraint = data.constraint
     obj = data.obj
     ksupp = data.ksupp
     sb = data.sb
@@ -123,14 +148,14 @@ function nctssos_higher!(data::ncupop_type; TS="block", merge=false, md=3, solve
     if QUIET == false
         println("Starting to compute the block structure...")
     end
-    blocks,cl,blocksize,sb,numb,status = get_ncblocks(ksupp, basis, sb=sb, numb=numb, TS=TS, QUIET=QUIET, merge=merge, md=md, obj=obj)
+    blocks,cl,blocksize,sb,numb,status = get_ncblocks(ksupp, basis, sb=sb, numb=numb, TS=TS, QUIET=QUIET, merge=merge, md=md, obj=obj, partition=partition, constraint=constraint)
     opt = nothing
     if status == 1
         if QUIET == false
             mb = maximum(maximum.(sb))
             println("Obtained the block structure. The maximal size of blocks is $mb.")
         end
-        opt,ksupp = ncblockupop(supp, coe, basis, blocks, cl, blocksize, QUIET=QUIET, obj=obj, solve=solve)
+        opt,ksupp = ncblockupop(supp, coe, basis, blocks, cl, blocksize, QUIET=QUIET, obj=obj, partition=partition, constraint=constraint, solve=solve)
     end
     data.ksupp = ksupp
     data.sb = sb
@@ -244,15 +269,13 @@ function _cyclic_canon(a::Vector{UInt16})
 end
 
 function cyclic_canon(supp, coe)
-    nsupp = copy(supp)
-    nsupp = _sym_canon.(nsupp)
-    nsupp = _cyclic_canon.(nsupp)
+    nsupp = [min(_cyclic_canon(word), _cyclic_canon(reverse(word))) for word in supp]
     sort!(nsupp)
     unique!(nsupp)
     l = length(nsupp)
     ncoe = zeros(l)
     for i = 1:length(supp)
-        Locb = ncbfind(nsupp,l,_cyclic_canon(_sym_canon(supp[i])))
+        Locb = ncbfind(nsupp, l, _cyclic_canon(_sym_canon(supp[i])))
         ncoe[Locb] += coe[i]
     end
     return nsupp,ncoe
@@ -285,7 +308,7 @@ function sym_canon(supp, coe)
     l = length(nsupp)
     ncoe = zeros(l)
     for i = 1:length(supp)
-        Locb = ncbfind(nsupp,l,_sym_canon(supp[i]))
+        Locb = ncbfind(nsupp, l, _sym_canon(supp[i]))
         ncoe[Locb] += coe[i]
     end
     return nsupp,ncoe
@@ -355,20 +378,13 @@ function ncbfind(A, l, a; rev=false)
     return 0
 end
 
-function get_ncgraph(ksupp, basis; obj="eigen")
+function get_ncgraph(ksupp, basis; obj="eigen", partition=0, constraint=nothing)
     lb = length(basis)
     G = SimpleGraph(lb)
     lksupp = length(ksupp)
     for i = 1:lb, j = i+1:lb
         bi = [basis[i][end:-1:1]; basis[j]]
-        bi = _sym_canon(bi)
-        if obj == "trace"
-            bi = _cyclic_canon(bi)
-        end
-        # if nx>0
-        #     bi=comm(bi, nx)
-        #     proj!(bi)
-        # end
+        bi = reduce!(bi, obj=obj, partition=partition, constraint=constraint)
         if ncbfind(ksupp, lksupp, bi) != 0
            add_edge!(G, i, j)
         end
@@ -376,13 +392,13 @@ function get_ncgraph(ksupp, basis; obj="eigen")
     return G
 end
 
-function get_ncblocks(ksupp, basis; sb=[], numb=[], TS="block", obj="eigen", QUIET=true, merge=false, md=3)
+function get_ncblocks(ksupp, basis; sb=[], numb=[], TS="block", obj="eigen", partition=0, constraint=nothing, QUIET=true, merge=false, md=3)
     if TS == false
         blocksize = [length(basis)]
         blocks = [[i for i=1:length(basis)]]
         cl = 1
     else
-        G = get_ncgraph(ksupp, basis, obj=obj)
+        G = get_ncgraph(ksupp, basis, obj=obj, partition=partition, constraint=constraint)
         if TS == "block"
             blocks = connected_components(G)
             blocksize = length.(blocks)
@@ -410,22 +426,23 @@ function get_ncblocks(ksupp, basis; sb=[], numb=[], TS="block", obj="eigen", QUI
     return blocks,cl,blocksize,nsb,nnumb,status
 end
 
-function ncblockupop(supp, coe, basis, blocks, cl, blocksize; QUIET=true, obj="eigen", solve=true)
+function ncblockupop(supp, coe, basis, blocks, cl, blocksize; QUIET=true, obj="eigen", partition=0, constraint=nothing, solve=true)
     ksupp = Vector{Vector{UInt16}}(undef, Int(sum(Int.(blocksize).^2+blocksize)/2))
     k = 1
     for i = 1:cl, j = 1:blocksize[i], r = j:blocksize[i]
         @inbounds bi = [basis[blocks[i][j]][end:-1:1]; basis[blocks[i][r]]]
-        @inbounds ksupp[k] = _sym_canon(bi)
+        @inbounds ksupp[k] = bi
         k += 1
     end
-    if obj == "trace"
-        ksupp = _cyclic_canon.(ksupp)
-    end
+    ksupp = reduce!.(ksupp, obj=obj, partition=partition, constraint=constraint)
     sort!(ksupp)
     unique!(ksupp)
+    lksupp = length(ksupp)
+    if QUIET == false
+        println("There are $lksupp affine constraints.")
+    end
     objv = nothing
     if solve == true
-        lksupp = length(ksupp)
         if QUIET == false
             println("Assembling the SDP...")
         end
@@ -437,19 +454,14 @@ function ncblockupop(supp, coe, basis, blocks, cl, blocksize; QUIET=true, obj="e
             if bs == 1
                @inbounds pos = @variable(model, lower_bound=0)
                @inbounds bi = [basis[blocks[i][1]][end:-1:1]; basis[blocks[i][1]]]
-               if obj == "trace"
-                   bi = _cyclic_canon(bi)
-               end
+               bi = reduce!(bi, obj=obj, partition=partition, constraint=constraint)
                Locb = ncbfind(ksupp,lksupp,bi)
                @inbounds add_to_expression!(cons[Locb], pos)
             else
                @inbounds pos = @variable(model, [1:bs, 1:bs], PSD)
                for j = 1:blocksize[i], r = j:blocksize[i]
                    @inbounds bi = [basis[blocks[i][j]][end:-1:1]; basis[blocks[i][r]]]
-                   bi = _sym_canon(bi)
-                   if obj == "trace"
-                       bi = _cyclic_canon(bi)
-                   end
+                   bi = reduce!(bi, obj=obj, partition=partition, constraint=constraint)
                    Locb = ncbfind(ksupp, lksupp, bi)
                    if j == r
                        @inbounds add_to_expression!(cons[Locb], pos[j,r])
@@ -494,29 +506,41 @@ function ncblockupop(supp, coe, basis, blocks, cl, blocksize; QUIET=true, obj="e
     return objv,ksupp
 end
 
-# function proj!(a::Vector{UInt16})
-#     i=1
-#     while i<=length(a)-1
-#         if a[i]==a[i+1]
-#             deleteat!(a, i)
-#         else
-#             i+=1
-#         end
-#     end
-#     return a
-# end
-#
-# function comm(a::Vector{UInt16}, nx)
-#     ind1=a.<=nx
-#     ind2=a.>nx
-#     return [a[ind1]; a[ind2]]
-# end
-#
-# function is_basis(a::Vector{UInt16}, nx)
-#     for i=1:length(a)-1
-#         if a[i]==a[i+1]
-#             return false
-#         end
-#     end
-#     return comm(a, nx)==a
-# end
+function reduce_cons!(word; constraint="unipotent")
+    i = 1
+    while i < length(word)
+        if word[i] == word[i+1]
+            deleteat!(word, i)
+            if constraint == "unipotent"
+                deleteat!(word, i)
+            end
+        else
+            i += 1
+        end
+    end
+    return word
+end
+
+function reduce!(word; obj="eigen", partition=0, constraint=nothing)
+    if obj == "trace"
+        word = min(_cyclic_canon(word), _cyclic_canon(reverse(word)))
+    else
+        if partition > 0 && constraint == nothing
+            word = min(_comm(word, partition), _comm(reverse(word), partition))
+        elseif partition == 0 && constraint != nothing
+            cword = copy(word)
+            word = min(reduce_cons!(word, constraint = constraint), reduce_cons!(reverse(cword), constraint = constraint))
+        elseif partition > 0 && constraint != nothing
+            word = min(reduce_cons!(_comm(word, partition), constraint = constraint), reduce_cons!(_comm(reverse(word), partition), constraint = constraint))
+        else
+            word = _sym_canon(word)
+        end
+    end
+    return word
+end
+
+function _comm(word::Vector{UInt16}, partition)
+    ind1 = word .<= partition
+    ind2 = word .> partition
+    return [word[ind1]; word[ind2]]
+end

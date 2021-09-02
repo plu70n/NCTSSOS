@@ -75,7 +75,7 @@ function nctssos_first(supp::Vector{Vector{Vector{UInt16}}}, coe, n::Int64, d::I
     for i = 1:m
         basis[i+1] = get_ncbasis(n, d-Int(ceil(dg[i]/2)))
         if obj == "trace"
-            append!(ksupp, _cyclic_canon.(_sym_canon.(supp[i+1])))
+            append!(ksupp, [min(_cyclic_canon(word), _cyclic_canon(reverse(word))) for word in supp[i+1]])
         else
             append!(ksupp, _sym_canon.(supp[i+1]))
         end
@@ -228,10 +228,7 @@ function get_nccgraph(ksupp, supp, basis; obj="eigen")
         r = 1
         while r <= length(supp)
             bi = [basis[i][end:-1:1]; supp[r]; basis[j]]
-            bi = _sym_canon(bi)
-            if obj == "trace"
-                bi = _cyclic_canon(bi)
-            end
+            bi = reduce!(bi, obj=obj)
             if ncbfind(ksupp, lksupp, bi)!=0
                break
             else
@@ -312,21 +309,21 @@ function ncblockcpop(m, supp, coe, basis, blocks, cl, blocksize; numeq=0, QUIET=
     end
     gsupp = get_ncgsupp(m, supp, basis[2:end], blocks[2:end], cl[2:end], blocksize[2:end])
     append!(ksupp, gsupp)
-    ksupp = _sym_canon.(ksupp)
-    if obj == "trace"
-        ksupp = _cyclic_canon.(ksupp)
-    end
+    ksupp = reduce!.(ksupp, obj=obj)
     sort!(ksupp)
     unique!(ksupp)
+    lksupp = length(ksupp)
+    if QUIET == false
+        println("There are $lksupp affine constraints.")
+    end
     objv = nothing
     if solve == true
-        lksupp = length(ksupp)
         if QUIET==false
             println("Assembling the SDP...")
         end
         model = Model(optimizer_with_attributes(Mosek.Optimizer))
         set_optimizer_attribute(model, MOI.Silent(), QUIET)
-        time=@elapsed begin
+        time = @elapsed begin
         cons = [AffExpr(0) for i=1:lksupp]
         pos = Vector{Union{VariableRef,Symmetric{VariableRef}}}(undef, cl[1])
         for i = 1:cl[1]
@@ -334,19 +331,14 @@ function ncblockcpop(m, supp, coe, basis, blocks, cl, blocksize; numeq=0, QUIET=
             if bs == 1
                @inbounds pos[i] = @variable(model, lower_bound=0)
                @inbounds bi = [basis[1][blocks[1][i][1]][end:-1:1]; basis[1][blocks[1][i][1]]]
-               if obj == "trace"
-                   bi = _cyclic_canon(bi)
-               end
+               bi = reduce!(bi, obj=obj)
                Locb = ncbfind(ksupp, lksupp, bi)
                @inbounds add_to_expression!(cons[Locb], pos[i])
             else
                @inbounds pos[i] = @variable(model, [1:bs, 1:bs], PSD)
                for j = 1:bs, r = j:bs
                    @inbounds bi = [basis[1][blocks[1][i][j]][end:-1:1]; basis[1][blocks[1][i][r]]]
-                   bi = _sym_canon(bi)
-                   if obj == "trace"
-                       bi = _cyclic_canon(bi)
-                   end
+                   bi = reduce!(bi, obj=obj)
                    Locb = ncbfind(ksupp, lksupp, bi)
                    if j == r
                        @inbounds add_to_expression!(cons[Locb], pos[i][j,r])
@@ -369,10 +361,7 @@ function ncblockcpop(m, supp, coe, basis, blocks, cl, blocksize; numeq=0, QUIET=
                     end
                     for s = 1:length(supp[k+1])
                         @inbounds bi = [basis[k+1][blocks[k+1][i][1]][end:-1:1]; supp[k+1][s]; basis[k+1][blocks[k+1][i][1]]]
-                        bi = _sym_canon(bi)
-                        if obj == "trace"
-                            bi = _cyclic_canon(bi)
-                        end
+                        bi = reduce!(bi, obj=obj)
                         Locb = ncbfind(ksupp, lksupp, bi)
                         @inbounds add_to_expression!(cons[Locb], coe[k+1][s], gpos[k][i])
                     end
@@ -384,10 +373,7 @@ function ncblockcpop(m, supp, coe, basis, blocks, cl, blocksize; numeq=0, QUIET=
                     end
                     for j = 1:bs, r = j:bs, s = 1:length(supp[k+1])
                         @inbounds bi=[basis[k+1][blocks[k+1][i][j]][end:-1:1]; supp[k+1][s]; basis[k+1][blocks[k+1][i][r]]]
-                        bi = _sym_canon(bi)
-                        if obj == "trace"
-                            bi = _cyclic_canon(bi)
-                        end
+                        bi = reduce!(bi, obj=obj)
                         Locb = ncbfind(ksupp, lksupp, bi)
                         if j == r
                             @inbounds add_to_expression!(cons[Locb], coe[k+1][s], gpos[k][i][j,r])
@@ -413,14 +399,14 @@ function ncblockcpop(m, supp, coe, basis, blocks, cl, blocksize; numeq=0, QUIET=
         @constraint(model, cons.==bc)
         @objective(model, Max, lower)
         end
-        if QUIET==false
+        if QUIET == false
             println("SDP assembling time: $time seconds.")
             println("Solving the SDP...")
         end
-        time=@elapsed begin
+        time = @elapsed begin
         optimize!(model)
         end
-        if QUIET==false
+        if QUIET == false
             println("SDP solving time: $time seconds.")
         end
         status = termination_status(model)

@@ -196,19 +196,15 @@ function blockupop_mix(n, supp, coe, basis, cliques, cql, cliquesize, blocks, cl
         @inbounds bi = [basis[i][blocks[i][j][k]][end:-1:1]; basis[i][blocks[i][j][r]]]
         push!(ksupp, bi)
     end
-    ksupp = _sym_canon.(ksupp)
-    if obj == "trace"
-        ksupp = _cyclic_canon.(ksupp)
-    end
-    # if nx>0
-    #     ksupp=comm.(ksupp, nx)
-    #     proj!.(ksupp)
-    # end
+    ksupp = reduce!.(ksupp, obj=obj)
     sort!(ksupp)
     unique!(ksupp)
+    lksupp = length(ksupp)
+    if QUIET == false
+        println("There are $lksupp affine constraints.")
+    end
     objv = nothing
     if solve == true
-        lksupp = length(ksupp)
         if QUIET == false
             println("Assembling the SDP...")
         end
@@ -223,13 +219,7 @@ function blockupop_mix(n, supp, coe, basis, cliques, cql, cliquesize, blocks, cl
                 if blocksize[i][k] == 1
                    pos[i][k] = @variable(model, lower_bound=0)
                    @inbounds bi = [basis[i][blocks[i][k][1]][end:-1:1]; basis[i][blocks[i][k][1]]]
-                   if obj == "trace"
-                       bi = _cyclic_canon(bi)
-                   end
-                   # if nx>0
-                   #     bi=comm(bi, nx)
-                   #     proj!(bi)
-                   # end
+                   bi = reduce!(bi, obj=obj)
                    Locb = ncbfind(ksupp, lksupp, bi)
                    @inbounds add_to_expression!(cons[Locb], pos[i][k])
                 else
@@ -238,14 +228,7 @@ function blockupop_mix(n, supp, coe, basis, cliques, cql, cliquesize, blocks, cl
                        @inbounds ind1 = blocks[i][k][j]
                        @inbounds ind2 = blocks[i][k][r]
                        @inbounds bi = [basis[i][ind1][end:-1:1]; basis[i][ind2]]
-                       bi = _sym_canon(bi)
-                       if obj == "trace"
-                           bi = _cyclic_canon(bi)
-                       end
-                       # if nx>0
-                       #     bi=comm(bi, nx)
-                       #     proj!(bi)
-                       # end
+                       bi = reduce!(bi, obj=obj)
                        Locb = ncbfind(ksupp, lksupp, bi)
                        if j == r
                            @inbounds add_to_expression!(cons[Locb], pos[i][k][j,r])
@@ -312,15 +295,15 @@ function blockcpop_mix(n, m, supp, coe, basis, cliques, cql, cliquesize, J, ncc,
     for i ∈ ncc
         append!(ksupp, supp[i+1])
     end
-    ksupp = _sym_canon.(ksupp)
-    if obj == "trace"
-        ksupp = _cyclic_canon.(ksupp)
-    end
+    ksupp = reduce!.(ksupp, obj=obj)
     sort!(ksupp)
     unique!(ksupp)
+    lksupp = length(ksupp)
+    if QUIET == false
+        println("There are $lksupp affine constraints.")
+    end
     objv = nothing
     if solve == true
-        lksupp = length(ksupp)
         if QUIET == false
             println("Assembling the SDP...")
         end
@@ -332,9 +315,7 @@ function blockcpop_mix(n, m, supp, coe, basis, cliques, cql, cliquesize, J, ncc,
             if blocksize[i][1][l] == 1
                @inbounds pos = @variable(model, lower_bound=0)
                @inbounds bi = [basis[i][1][blocks[i][1][l][1]][end:-1:1]; basis[i][1][blocks[i][1][l][1]]]
-               if obj == "trace"
-                   bi = _cyclic_canon(bi)
-               end
+               bi = reduce!(bi, obj=obj)
                Locb = ncbfind(ksupp, lksupp,bi)
                @inbounds add_to_expression!(cons[Locb], pos)
             else
@@ -344,10 +325,7 @@ function blockcpop_mix(n, m, supp, coe, basis, cliques, cql, cliquesize, J, ncc,
                    @inbounds ind1 = blocks[i][1][l][t]
                    @inbounds ind2 = blocks[i][1][l][r]
                    @inbounds bi = [basis[i][1][ind1][end:-1:1]; basis[i][1][ind2]]
-                   bi = _sym_canon(bi)
-                   if obj == "trace"
-                       bi = _cyclic_canon(bi)
-                   end
+                   bi = reduce!(bi, obj=obj)
                    Locb = ncbfind(ksupp, lksupp, bi)
                    if t == r
                       @inbounds add_to_expression!(cons[Locb], pos[t,r])
@@ -365,10 +343,7 @@ function blockcpop_mix(n, m, supp, coe, basis, cliques, cql, cliquesize, J, ncc,
                 pos = @variable(model)
             end
             for j = 1:length(supp[i+1])
-                bi = _sym_canon(supp[i+1][j])
-                if obj == "trace"
-                    bi = _cyclic_canon(bi)
-                end
+                bi = reduce!(supp[i+1][j], obj=obj)
                 Locb = ncbfind(ksupp, lksupp, bi)
                 @inbounds add_to_expression!(cons[Locb], coe[i+1][j], pos)
             end
@@ -385,10 +360,7 @@ function blockcpop_mix(n, m, supp, coe, basis, cliques, cql, cliquesize, J, ncc,
                     ind1 = blocks[i][j+1][l][1]
                     for s = 1:length(supp[w+1])
                         @inbounds bi = [basis[i][j+1][ind1][end:-1:1]; supp[w+1][s]; basis[i][j+1][ind1]]
-                        bi = _sym_canon(bi)
-                        if obj == "trace"
-                            bi = _cyclic_canon(bi)
-                        end
+                        bi = reduce!(bi, obj=obj)
                         Locb = ncbfind(ksupp, lksupp, bi)
                         @inbounds add_to_expression!(cons[Locb], coe[w+1][s], pos)
                     end
@@ -403,10 +375,7 @@ function blockcpop_mix(n, m, supp, coe, basis, cliques, cql, cliquesize, J, ncc,
                         ind2 = blocks[i][j+1][l][r]
                         for s = 1:length(supp[w+1])
                             @inbounds bi = [basis[i][j+1][ind1][end:-1:1]; supp[w+1][s]; basis[i][j+1][ind2]]
-                            bi = _sym_canon(bi)
-                            if obj == "trace"
-                                bi = _cyclic_canon(bi)
-                            end
+                            bi = reduce!(bi, obj=obj)
                             Locb = ncbfind(ksupp, lksupp, bi)
                             if t == r
                                 @inbounds add_to_expression!(cons[Locb], coe[w+1][s], pos[t,r])
@@ -474,18 +443,11 @@ function get_blocks_mix(d, supp, cliques, cql, cliquesize; basis=[], sb=[], numb
         ksupp = copy(supp[ind])
         if flag == 1
             basis[i] = get_ncbasis(nvar, d, ind=cliques[i])
-            # if nx>0
-            #      basis[i]=basis[i][is_basis.(basis[i], nx)]
-            # end
             if obj == "trace"
                 append!(ksupp, [_cyclic_canon([basis[i][k][end:-1:1]; basis[i][k]]) for k=1:length(basis[i])])
             else
                 append!(ksupp, [[basis[i][k][end:-1:1]; basis[i][k]] for k=1:length(basis[i])])
             end
-            # if nx>0
-            #     ksupp=comm.(ksupp, nx)
-            #     proj!.(ksupp)
-            # end
             sort!(ksupp)
             unique!(ksupp)
             blocks[i],cl[i],blocksize[i],sb[i],numb[i],status[i] = get_ncblocks(ksupp, basis[i], TS=TS, obj=obj, QUIET=true, merge=merge, md=md)
