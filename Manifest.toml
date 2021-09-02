@@ -31,6 +31,12 @@ git-tree-sha1 = "f641eb0a4f00c343bbc32346e1217b86f3ce9dad"
 uuid = "49dc2e85-a5d0-5ad3-a950-438e2897f1b9"
 version = "0.5.1"
 
+[[ChordalGraph]]
+deps = ["LightGraphs"]
+git-tree-sha1 = "9a3297955f569607c103ab44a6b5815c0abdaece"
+uuid = "60fd0770-a5cf-11ea-07c5-d789f1eae5cb"
+version = "0.2.0"
+
 [[CodecBzip2]]
 deps = ["BinaryProvider", "Libdl", "TranscodingStreams"]
 git-tree-sha1 = "5db086e510c11b4c87d05067627eadb2dc079995"

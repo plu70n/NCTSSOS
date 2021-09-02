@@ -71,7 +71,7 @@ opt,data = cs_nctssos_higher!(data, TS="MD")
 ```
 
 ## References
-[1] [Exploiting Term Sparsity in Noncommutative Polynomial Optimization](https://arxiv.org/abs/2010.06956), 2020.  
+[1] [Exploiting Term Sparsity in Noncommutative Polynomial Optimization](https://arxiv.org/abs/2010.06956), 2021.  
 
 ## Contact
-[Jie Wang](https://wangjie212.github.io/jiewang/): jwang@laas.fr
+[Jie Wang](https://wangjie212.github.io/jiewang/): wangjie212@amss.ac.cn
